@@ -1,6 +1,7 @@
 import numpy
 from PIL import Image
 import sys
+import os
 
 # opencv is gone, one reshape and the raw rgb frames from ffmpeg are enough
 def read_frames(path, w, h):
@@ -38,6 +39,7 @@ def main():
         if ny < 0 or nx < 0 or ny + hh > h or nx + ww > w:
             continue
         dst[ny:ny + hh, nx:nx + ww] = src
+    os.makedirs("out", exist_ok=True)
     open("out/frames.rgb", "wb").write(out.reshape(-1).tobytes())
 
 main()
