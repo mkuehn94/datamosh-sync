@@ -57,26 +57,21 @@ def mosh(frames, vecs, w, h):
         dst[ny:ny + hh, nx:nx + ww] = src
     return out
 
-def main():    frames = read_frames(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
+def main():
+    if len(sys.argv) < 5:
+        print("usage: datamosh frames.rgb w h vec.mv [beats.txt]")
+        return
+    w = int(sys.argv[2])
+    h = int(sys.argv[3])
+    frames = read_frames(sys.argv[1], w, h)
     vecs = read_vecs(sys.argv[4])
     beats = read_beats(sys.argv[5]) if len(sys.argv) > 5 else []
     print(frames.shape, len(vecs), len(beats))
-    w = int(sys.argv[2])
-    h = int(sys.argv[3])
     if beats:
         vecs = quantize(vecs, beats, 24)
-    out = frames.copy()
-    for (f, x, y, ww, hh, dx, dy, _mode) in vecs:
-        if f + 1 >= frames.shape[0]:
-            continue
-        src = frames[f][y:y + hh, x:x + ww]
-        dst = out[f + 1]
-        ny = y + dy
-        nx = x + dx
-        if ny < 0 or nx < 0 or ny + hh > h or nx + ww > w:
-            continue
-        dst[ny:ny + hh, nx:nx + ww] = src
+    out = mosh(frames, vecs, w, h)
     os.makedirs("out", exist_ok=True)
     open("out/frames.rgb", "wb").write(out.reshape(-1).tobytes())
 
-main()
+if __name__ == "__main__":
+    main()
