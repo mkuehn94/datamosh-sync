@@ -70,8 +70,12 @@ def main():
     if beats:
         vecs = quantize(vecs, beats, 24)
     out = mosh(frames, vecs, w, h)
-    os.makedirs("out", exist_ok=True)
-    open("out/frames.rgb", "wb").write(out.reshape(-1).tobytes())
+    os.makedirs("out/frames", exist_ok=True)
+    n = 0
+    while n < out.shape[0]:
+        img = Image.fromarray(out[n])
+        img.save("out/frames/f%04d.ppm" % n)
+        n += 1
 
 if __name__ == "__main__":
     main()
