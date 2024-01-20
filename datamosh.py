@@ -9,6 +9,30 @@ def read_frames(path, w, h):
     n = len(data) // (w * h * 3)
     return numpy.frombuffer(data, dtype=numpy.uint8).reshape(n, h, w, 3)
 
+def read_beats(path):
+    out = []
+    for line in open(path):
+        p = line.split()
+        if p:
+            out.append(int(float(p[0])))
+    return out
+
+def quantize(vecs, beats, fps):
+    # one vector per beat: the beat the source frame falls into decides
+    # where the block starts, everything between two beats is the freeze
+    # of that block. the first vector of a beat wins.
+    out = []
+    seen = []
+    for (f, x, y, ww, hh, dx, dy, mode) in vecs:
+        b = 0
+        while b + 1 < len(beats) and beats[b + 1] <= int(f * 1000 / fps):
+            b += 1
+        if b in seen:
+            continue
+        seen.append(b)
+        out.append((b, x, y, ww, hh, dx, dy, mode))
+    return out
+
 def read_vecs(path):
     out = []
     for line in open(path):
@@ -25,9 +49,12 @@ def main():
         return
     frames = read_frames(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
     vecs = read_vecs(sys.argv[4])
-    print(frames.shape, len(vecs))
+    beats = read_beats(sys.argv[5]) if len(sys.argv) > 5 else []
+    print(frames.shape, len(vecs), len(beats))
     w = int(sys.argv[2])
     h = int(sys.argv[3])
+    if beats:
+        vecs = quantize(vecs, beats, 24)
     out = frames.copy()
     for (f, x, y, ww, hh, dx, dy, _mode) in vecs:
         if f + 1 >= frames.shape[0]:
