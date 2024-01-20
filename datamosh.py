@@ -43,11 +43,21 @@ def read_vecs(path):
                     int(p[5]), int(p[6]), p[7]))
     return out
 
-def main():
-    if len(sys.argv) < 4:
-        print("usage: datamosh frames.rgb w h vec.mv")
-        return
-    frames = read_frames(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
+def mosh(frames, vecs, w, h):
+    out = frames.copy()
+    for (f, x, y, ww, hh, dx, dy, _mode) in vecs:
+        if f + 1 >= frames.shape[0]:
+            continue
+        src = frames[f][y:y + hh, x:x + ww]
+        dst = out[f + 1]
+        ny = y + dy
+        nx = x + dx
+        if ny < 0 or nx < 0 or ny + hh > h or nx + ww > w:
+            continue
+        dst[ny:ny + hh, nx:nx + ww] = src
+    return out
+
+def main():    frames = read_frames(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))
     vecs = read_vecs(sys.argv[4])
     beats = read_beats(sys.argv[5]) if len(sys.argv) > 5 else []
     print(frames.shape, len(vecs), len(beats))
