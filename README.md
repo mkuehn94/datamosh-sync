@@ -1,12 +1,23 @@
-# datamosh-sync
-
 datamoshing where the artifacts follow the beat instead of whatever
-the encoder thought was funny. input: a clip, a motion vector sidecar, a wav.
-output: the moshed clip, gif if the clip is short.
+the encoder thought was funny.
 
-the vectors come from my own block matcher, the mp4 decoder never went
-beyond reading the boxes, the sidecar format is one line per block:
+the pipeline is three steps, all of it ffmpeg + numpy:
 
-    f x y w h dx dy freeze
+    scripts/frames.sh clip.mp4 frames.rgb
+    datamosh.py frames.rgb W H blocks.mv [beats.txt [fps]]
+    scripts/gif.sh                     # out/frames -> mp4 + gif
 
-the repo is small, the clips are not in it.
+the block matcher is not in this repo, it writes the sidecar:
+
+    f x y w h dx dy mode
+
+one line per macroblock, `f` the frame the vector belongs to. `mode` is
+`hold`, `drop` or `freeze`, nothing reads `drop` yet.
+
+with a beats.txt (one ms timestamp per line, scripts/beats.sh makes one
+from a wav) the vectors get quantized: one vector per beat, first one
+wins, the rest of the beat is the freeze of that block. that is the
+whole sync idea, the beat grid decides where a block starts.
+
+viewer.py plays raw RGB in the terminal. viewer2.py opens a Tk window
+and needs tkinter, Pillow and a display.
