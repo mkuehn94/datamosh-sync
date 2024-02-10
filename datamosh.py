@@ -68,7 +68,8 @@ def main():
     beats = read_beats(sys.argv[5]) if len(sys.argv) > 5 else []
     print(frames.shape, len(vecs), len(beats))
     if beats:
-        vecs = quantize(vecs, beats, 24)
+        fps = int(sys.argv[6]) if len(sys.argv) > 6 else 24
+        vecs = quantize(vecs, beats, fps)
     out = mosh(frames, vecs, w, h)
     os.makedirs("out/frames", exist_ok=True)
     n = 0
