@@ -12,7 +12,7 @@ def main():
     n = len(data) // (w * h * 3)
     frames = numpy.frombuffer(data, dtype=numpy.uint8).reshape(n, h, w, 3)
     std = curses.initscr()
-    curses.no_echo()
+    curses.noecho()
     i = 0
     while i < n:
         row = 1
