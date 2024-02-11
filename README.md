@@ -21,3 +21,9 @@ whole sync idea, the beat grid decides where a block starts.
 
 viewer.py plays raw RGB in the terminal. viewer2.py opens a Tk window
 and needs tkinter, Pillow and a display.
+## todo
+
+- `drop` vectors, a block that drops should pull the frame behind
+  it instead of freezing
+- beat grid from the wav inside the python instead of scripts/beats.sh
+- raw RGB uses FFmpeg rawvideo; PPM sequences use image2
