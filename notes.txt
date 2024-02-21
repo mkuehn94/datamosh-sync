@@ -1,0 +1,48 @@
+datamosh sync notes
+===================
+
+ideas:
+- motion vector corruption (classic datamosh look)
+- jpeg artifact amplification
+- remove I-frames, keep P-frames -> trails
+- block shuffling synced to beats
+- color channel shifts
+- recursive feedback loops
+
+problems:
+- ffmpeg API is confusing as hell
+- how to properly corrupt motion vectors?
+- need to work on raw h264 stream not decoded frames
+- gtk3 works, layout needs work
+
+TODO:
+- implement proper beat detection (aubio?)
+- add more crazy effects
+- make gui less ugly
+- optimize block operations (memcpy everywhere)
+- add preview window that actually shows video
+- save output to file
+
+beat sync ideas:
+- pulse/zoom on kick
+- glitch intensity follows energy
+- color shift on snare
+- block shuffle on strong beats
+- smooth interpolation between effects
+
+video format notes:
+- need to extract raw h264 stream
+- I-frames are key frames
+- P-frames reference previous frames
+- removing I-frames = datamosh trails
+- corrupting motion vectors = glitch effect
+
+refs:
+- https://github.com/grampajoe/Autodatamosh
+- http://datamoshing.com/
+- various stackoverflow posts about ffmpeg
+
+test videos:
+- need something with clear subject
+- good motion
+- contrasting colors
