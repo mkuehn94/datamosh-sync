@@ -1,0 +1,35 @@
+#ifndef VIDEO_PROCESSOR_H
+#define VIDEO_PROCESSOR_H
+
+#include <string>
+#include <vector>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+}
+
+class VideoProcessor {
+public:
+    VideoProcessor();
+    ~VideoProcessor();
+
+    bool open(const std::string& path);
+    void close();
+
+    bool read_frame();
+    uint8_t* get_frame_data();
+    int get_width() { return width; }
+    int get_height() { return height; }
+
+private:
+    AVFormatContext* fmt_ctx;
+    AVCodecContext* codec_ctx;
+    AVFrame* frame;
+    AVPacket* packet;
+    int video_stream_idx;
+    int width, height;
+};
+
+#endif
