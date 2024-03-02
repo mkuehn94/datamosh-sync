@@ -30,7 +30,6 @@ vector<NALUnit> find_nal_units(uint8_t* data, int size) {
             nal.offset = i + 4;
             nal.type = data[i+4] & 0x1F;
 
-            // find next start code
             int next = i + 4;
             while (next < size - 4) {
                 if (data[next] == 0 && data[next+1] == 0 &&
@@ -50,7 +49,6 @@ vector<NALUnit> find_nal_units(uint8_t* data, int size) {
 }
 
 void remove_iframes(const char* input, const char* output) {
-    // read file
     ifstream in(input, ios::binary);
     if (!in) {
         cerr << "cant open input" << endl;
@@ -67,16 +65,13 @@ void remove_iframes(const char* input, const char* output) {
 
     cout << "read " << size << " bytes" << endl;
 
-    // find NAL units
     vector<NALUnit> nals = find_nal_units(buffer, size);
     cout << "found " << nals.size() << " NAL units" << endl;
 
-    // write output without I-frames
     ofstream out(output, ios::binary);
 
     for (const NALUnit& nal : nals) {
         if (nal.type != NAL_IDR && nal.type != NAL_SPS && nal.type != NAL_PPS) {
-            // write start code
             uint8_t start[] = {0, 0, 0, 1};
             out.write((char*)start, 4);
             out.write((char*)&buffer[nal.offset], nal.size);
