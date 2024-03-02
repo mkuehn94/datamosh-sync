@@ -20,34 +20,6 @@ struct NALUnit {
     int size;
 };
 
-vector<NALUnit> find_nal_units(uint8_t* data, int size) {
-    vector<NALUnit> units;
-
-    // look for start codes: 0x00 0x00 0x00 0x01
-    for (int i = 0; i < size - 4; i++) {
-        if (data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 1) {
-            NALUnit nal;
-            nal.offset = i + 4;
-            nal.type = data[i+4] & 0x1F;
-
-            int next = i + 4;
-            while (next < size - 4) {
-                if (data[next] == 0 && data[next+1] == 0 &&
-                    data[next+2] == 0 && data[next+3] == 1) {
-                    break;
-                }
-                next++;
-            }
-            nal.size = next - nal.offset;
-
-            units.push_back(nal);
-            i = next - 1;
-        }
-    }
-
-    return units;
-}
-
 void remove_iframes(const char* input, const char* output) {
     ifstream in(input, ios::binary);
     if (!in) {
@@ -65,20 +37,39 @@ void remove_iframes(const char* input, const char* output) {
 
     cout << "read " << size << " bytes" << endl;
 
-    vector<NALUnit> nals = find_nal_units(buffer, size);
-    cout << "found " << nals.size() << " NAL units" << endl;
-
+    // walk the stream once, keep everything that isnt an I-frame or the
+    // parameter sets. start codes are 0x00 0x00 0x00 0x01
     ofstream out(output, ios::binary);
+    int found = 0;
 
-    for (const NALUnit& nal : nals) {
-        if (nal.type != NAL_IDR && nal.type != NAL_SPS && nal.type != NAL_PPS) {
-            uint8_t start[] = {0, 0, 0, 1};
-            out.write((char*)start, 4);
-            out.write((char*)&buffer[nal.offset], nal.size);
-        } else {
-            cout << "skipping I-frame at " << nal.offset << endl;
+    for (int i = 0; i < size - 4; i++) {
+        if (buffer[i] == 0 && buffer[i+1] == 0 && buffer[i+2] == 0 && buffer[i+3] == 1) {
+            int offset = i + 4;
+            int type = buffer[i+4] & 0x1F;
+
+            int next = offset;
+            while (next < size - 4) {
+                if (buffer[next] == 0 && buffer[next+1] == 0 &&
+                    buffer[next+2] == 0 && buffer[next+3] == 1) {
+                    break;
+                }
+                next++;
+            }
+            found++;
+
+            if (type != NAL_IDR && type != NAL_SPS && type != NAL_PPS) {
+                uint8_t start[] = {0, 0, 0, 1};
+                out.write((char*)start, 4);
+                out.write((char*)&buffer[offset], next - offset);
+            } else {
+                cout << "skipping I-frame at " << offset << endl;
+            }
+
+            i = next - 1;
         }
     }
+
+    cout << "found " << found << " NAL units" << endl;
 
     out.close();
     delete[] buffer;
