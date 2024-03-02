@@ -1,11 +1,9 @@
 // trying to corrupt h264 stream directly
 // this might be the key to real datamoshing
 
-#include <iostream>
-#include <fstream>
-#include <vector>
-
-using namespace std;
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 
 // h264 NAL unit types
 #define NAL_SLICE 1
@@ -14,72 +12,66 @@ using namespace std;
 #define NAL_SPS 7
 #define NAL_PPS 8
 
-struct NALUnit {
-    int type;
-    int offset;
-    int size;
-};
+static int at_start_code(uint8_t* p) {
+    return p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 1;
+}
 
 void remove_iframes(const char* input, const char* output) {
-    ifstream in(input, ios::binary);
+    FILE* in = fopen(input, "rb");
     if (!in) {
-        cerr << "cant open input" << endl;
+        fprintf(stderr, "cant open input\n");
         return;
     }
 
-    in.seekg(0, ios::end);
-    int size = in.tellg();
-    in.seekg(0, ios::beg);
+    fseek(in, 0, SEEK_END);
+    long size = ftell(in);
+    fseek(in, 0, SEEK_SET);
 
-    uint8_t* buffer = new uint8_t[size];
-    in.read((char*)buffer, size);
-    in.close();
+    uint8_t* buffer = (uint8_t*)malloc(size);  // file is still called .cpp, whatever
+    fread(buffer, 1, size, in);
+    fclose(in);
 
-    cout << "read " << size << " bytes" << endl;
+    printf("read %ld bytes\n", size);
 
     // walk the stream once, keep everything that isnt an I-frame or the
-    // parameter sets. start codes are 0x00 0x00 0x00 0x01
-    ofstream out(output, ios::binary);
+    // parameter sets
+    FILE* out = fopen(output, "wb");
+    static const uint8_t start[] = {0, 0, 0, 1};
     int found = 0;
 
-    for (int i = 0; i < size - 4; i++) {
-        if (buffer[i] == 0 && buffer[i+1] == 0 && buffer[i+2] == 0 && buffer[i+3] == 1) {
-            int offset = i + 4;
-            int type = buffer[i+4] & 0x1F;
+    for (long i = 0; i < size - 4; i++) {
+        if (at_start_code(buffer + i)) {
+            long offset = i + 4;
+            int type = buffer[offset] & 0x1F;
 
-            int next = offset;
-            while (next < size - 4) {
-                if (buffer[next] == 0 && buffer[next+1] == 0 &&
-                    buffer[next+2] == 0 && buffer[next+3] == 1) {
-                    break;
-                }
+            long next = offset;
+            while (next < size - 4 && !at_start_code(buffer + next)) {
                 next++;
             }
             found++;
 
             if (type != NAL_IDR && type != NAL_SPS && type != NAL_PPS) {
-                uint8_t start[] = {0, 0, 0, 1};
-                out.write((char*)start, 4);
-                out.write((char*)&buffer[offset], next - offset);
+                fwrite(start, 1, 4, out);
+                fwrite(buffer + offset, 1, next - offset, out);
             } else {
-                cout << "skipping I-frame at " << offset << endl;
+                printf("skipping I-frame at %ld\n", offset);
             }
 
             i = next - 1;
         }
     }
 
-    cout << "found " << found << " NAL units" << endl;
+    printf("found %d NAL units\n", found);
 
-    out.close();
-    delete[] buffer;
+    fclose(out);
+    free(buffer);
 
-    cout << "done" << endl;
+    printf("done\n");
 }
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        cerr << "usage: " << argv[0] << " input.h264 output.h264" << endl;
+        fprintf(stderr, "usage: %s input.h264 output.h264\n", argv[0]);
         return 1;
     }
 
