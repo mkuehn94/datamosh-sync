@@ -1,4 +1,5 @@
 #include "effects.h"
+#include "constants.h"
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
