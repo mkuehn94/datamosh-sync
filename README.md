@@ -28,12 +28,16 @@ trying a C++ version with proper GUI and real-time control. way faster.
 
 src/ contains the new implementation:
 - video_processor: ffmpeg wrapper for reading video
-- audio_analyzer: beat detection (placeholder for now)
+- audio_analyzer: beat detection (placeholder for now) + audio extraction
 - effects: all the datamosh effects
 - gui: gtk3 interface with parameter sliders
 - stream_corrupter: experimental h264 NAL manipulation
 
-build with `make`, run with `./datamosh-sync video.mp4 audio.mp3`
+build with `make`, run with:
+```
+./datamosh-sync video.mp4              # uses embedded audio
+./datamosh-sync video.mp4 audio.mp3    # separate audio file
+```
 
 effects implemented:
 - motion vector glitching
