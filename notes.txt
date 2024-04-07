@@ -58,3 +58,10 @@ pipeline update:
 - order matters a lot! pulse before glitch looks bad
 - 50ms beat window works well
 - need to add file output next
+
+CLI build update:
+- disabled gtk gui, too many dependency issues
+- main.cpp now directly calls processor with defaults
+- **IT COMPILES** but output encoding still not implemented
+- can process frames but they go nowhere lol
+- need to add avformat encoder setup next
