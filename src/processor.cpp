@@ -45,6 +45,30 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
     return true;
 }
 
+bool VideoMosher::init_with_embedded_audio(const string& video_path) {
+    video = new VideoProcessor();
+    audio = new AudioAnalyzer();
+    effects = new EffectEngine();
+
+    if (!video->open(video_path)) {
+        cerr << "failed to open video" << endl;
+        return false;
+    }
+
+    // extract audio from the same video file
+    if (!audio->load_from_video(video_path)) {
+        cerr << "failed to extract audio from video" << endl;
+        return false;
+    }
+
+    audio->analyze();
+
+    beat_times = audio->get_beat_times();
+    cout << "initialized with " << beat_times.size() << " beats (from video)" << endl;
+
+    return true;
+}
+
 void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
     // check if we're on a beat
     bool on_beat = false;
