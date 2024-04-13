@@ -65,3 +65,11 @@ CLI build update:
 - **IT COMPILES** but output encoding still not implemented
 - can process frames but they go nowhere lol
 - need to add avformat encoder setup next
+
+RGB conversion update:
+- FIXED SEGFAULT! was passing YUV data to RGB effects
+- added proper YUV->RGB conversion using swscale
+- effects actually run now without crashing
+- tested with real video file, processes all frames
+- still no output encoding though
+- effects are SLOW on bigger videos, need optimization
