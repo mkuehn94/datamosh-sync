@@ -5,7 +5,8 @@ using namespace std;
 
 VideoProcessor::VideoProcessor()
     : fmt_ctx(nullptr), codec_ctx(nullptr), frame(nullptr),
-      packet(nullptr), video_stream_idx(-1), width(0), height(0) {
+      frame_rgb(nullptr), packet(nullptr), sws_ctx(nullptr),
+      rgb_buffer(nullptr), video_stream_idx(-1), width(0), height(0) {
 }
 
 VideoProcessor::~VideoProcessor() {
@@ -25,7 +26,7 @@ bool VideoProcessor::open(const string& path) {
     }
 
     // find video stream
-    for (int i = 0; i < fmt_ctx->nb_streams; i++) {
+    for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
         if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_stream_idx = i;
             break;
@@ -63,6 +64,9 @@ bool VideoProcessor::open(const string& path) {
 }
 
 void VideoProcessor::close() {
+    if (rgb_buffer) free(rgb_buffer);
+    if (frame_rgb) av_frame_free(&frame_rgb);
+    if (sws_ctx) sws_freeContext(sws_ctx);
     if (frame) av_frame_free(&frame);
     if (packet) av_packet_free(&packet);
     if (codec_ctx) avcodec_free_context(&codec_ctx);
@@ -96,4 +100,40 @@ uint8_t* VideoProcessor::get_frame_data() {
         return frame->data[0];
     }
     return nullptr;
+}
+
+uint8_t* VideoProcessor::get_frame_rgb() {
+    if (!frame) return nullptr;
+
+    // initialize converter if needed
+    if (!sws_ctx) {
+        sws_ctx = sws_getContext(
+            width, height, codec_ctx->pix_fmt,
+            width, height, AV_PIX_FMT_RGB24,
+            SWS_BILINEAR, nullptr, nullptr, nullptr
+        );
+
+        if (!sws_ctx) {
+            cerr << "Failed to initialize swscale context" << endl;
+            return nullptr;
+        }
+
+        // allocate RGB frame and buffer
+        frame_rgb = av_frame_alloc();
+        int numBytes = width * height * 3;  // RGB24 = 3 bytes per pixel
+        rgb_buffer = (uint8_t*)malloc(numBytes);
+
+        // setup frame_rgb to point to rgb_buffer
+        frame_rgb->data[0] = rgb_buffer;
+        frame_rgb->linesize[0] = width * 3;
+    }
+
+    // convert YUV to RGB
+    sws_scale(
+        sws_ctx,
+        frame->data, frame->linesize, 0, height,
+        frame_rgb->data, frame_rgb->linesize
+    );
+
+    return rgb_buffer;
 }

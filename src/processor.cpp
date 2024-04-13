@@ -137,11 +137,11 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     int frame_count = 0;
 
     while (video->read_frame()) {
-        uint8_t* frame_data = video->get_frame_data();
+        uint8_t* frame_data = video->get_frame_rgb();  // get RGB not YUV
         int width = video->get_width();
         int height = video->get_height();
 
-        if (frame_data) {
+        if (frame_data && width > 0 && height > 0) {
             process_frame(frame_data, width, height, time);
             frame_count++;
 

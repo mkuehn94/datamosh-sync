@@ -20,6 +20,7 @@ public:
 
     bool read_frame();
     uint8_t* get_frame_data();
+    uint8_t* get_frame_rgb();  // convert to RGB format
     int get_width() { return width; }
     int get_height() { return height; }
 
@@ -27,7 +28,10 @@ private:
     AVFormatContext* fmt_ctx;
     AVCodecContext* codec_ctx;
     AVFrame* frame;
+    AVFrame* frame_rgb;  // converted RGB frame
     AVPacket* packet;
+    struct SwsContext* sws_ctx;  // for YUV->RGB conversion
+    uint8_t* rgb_buffer;
     int video_stream_idx;
     int width, height;
 };
