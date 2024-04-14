@@ -306,11 +306,11 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
 
 void VideoMosher::finish_encoding() {
     if (!output_ctx) return;
-    
+
     // flush encoder
     if (enc_ctx) {
         avcodec_send_frame(enc_ctx, nullptr);
-        
+
         AVPacket* pkt = av_packet_alloc();
         int ret;
         while ((ret = avcodec_receive_packet(enc_ctx, pkt)) >= 0) {
@@ -321,21 +321,30 @@ void VideoMosher::finish_encoding() {
         }
         av_packet_free(&pkt);
     }
-    
+
     // write trailer
-    av_write_trailer(output_ctx);
-    
-    // cleanup
-    if (enc_sws_ctx) sws_freeContext(enc_sws_ctx);
-    if (enc_frame) av_frame_free(&enc_frame);
-    if (enc_ctx) avcodec_free_context(&enc_ctx);
-    if (output_ctx && !(output_ctx->oformat->flags & AVFMT_NOFILE)) {
-        avio_closep(&output_ctx->pb);
+    if (output_ctx) {
+        av_write_trailer(output_ctx);
     }
-    if (output_ctx) avformat_free_context(output_ctx);
-    
-    output_ctx = nullptr;
-    enc_ctx = nullptr;
-    enc_frame = nullptr;
-    enc_sws_ctx = nullptr;
+
+    // cleanup
+    if (enc_sws_ctx) {
+        sws_freeContext(enc_sws_ctx);
+        enc_sws_ctx = nullptr;
+    }
+    if (enc_frame) {
+        av_frame_free(&enc_frame);
+        enc_frame = nullptr;
+    }
+    if (enc_ctx) {
+        avcodec_free_context(&enc_ctx);
+        enc_ctx = nullptr;
+    }
+    if (output_ctx) {
+        if (!(output_ctx->oformat->flags & AVFMT_NOFILE)) {
+            avio_closep(&output_ctx->pb);
+        }
+        avformat_free_context(output_ctx);
+        output_ctx = nullptr;
+    }
 }
