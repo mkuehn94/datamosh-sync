@@ -27,6 +27,9 @@ public:
 
 private:
     void process_frame(uint8_t* frame_data, int width, int height, float time);
+    bool setup_encoder(const std::string& output_path, int width, int height);
+    void encode_frame(uint8_t* rgb_data);
+    void finish_encoding();
 
     VideoProcessor* video;
     AudioAnalyzer* audio;
@@ -37,6 +40,11 @@ private:
     int current_frame;
 
     AVFormatContext* output_ctx;
+    AVCodecContext* enc_ctx;
+    AVStream* out_stream;
+    AVFrame* enc_frame;
+    struct SwsContext* enc_sws_ctx;
+    int64_t next_pts;
 };
 
 #endif
