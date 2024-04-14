@@ -73,3 +73,13 @@ RGB conversion update:
 - tested with real video file, processes all frames
 - still no output encoding though
 - effects are SLOW on bigger videos, need optimization
+
+output encoding update:
+- OUTPUT ENCODING FINALLY WORKS!!!
+- implemented full H264 encoder with libavcodec
+- RGB->YUV420P conversion for encoding
+- proper PTS/timebase handling
+- writes actual output.mp4 files now
+- tested on huge video, creates 125MB output
+- IT'S A WORKING DATAMOSHING TOOL NOW
+- slow on big videos but it works
