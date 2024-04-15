@@ -164,3 +164,59 @@ void EffectEngine::wave_distortion(uint8_t* data, int width, int height, float p
         }
     }
 }
+
+void EffectEngine::color_remap(uint8_t* data, int width, int height, int mode) {
+    // swap color channels or remap palettes
+    // mode 0 = RGB to BGR
+    // mode 1 = RGB to GBR  
+    // mode 2 = invert colors
+    // mode 3 = psychedelic (weird math on colors)
+    
+    int size = width * height;
+    
+    for (int i = 0; i < size; i++) {
+        int idx = i * 3;
+        uint8_t r = data[idx + 0];
+        uint8_t g = data[idx + 1];
+        uint8_t b = data[idx + 2];
+        
+        switch(mode) {
+            case 0: // BGR
+                data[idx + 0] = b;
+                data[idx + 2] = r;
+                break;
+            case 1: // GBR rotate
+                data[idx + 0] = g;
+                data[idx + 1] = b;
+                data[idx + 2] = r;
+                break;
+            case 2: // invert
+                data[idx + 0] = 255 - r;
+                data[idx + 1] = 255 - g;
+                data[idx + 2] = 255 - b;
+                break;
+            case 3: // psychedelic
+                data[idx + 0] = (r + 128) % 256;
+                data[idx + 1] = (g * 2) % 256;
+                data[idx + 2] = (b ^ 128);
+                break;
+            case 4: // heat map kinda
+                // map brightness to heat colors
+                int brightness = (r + g + b) / 3;
+                if (brightness < 85) {
+                    data[idx + 0] = brightness * 3;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
+                } else if (brightness < 170) {
+                    data[idx + 0] = 255;
+                    data[idx + 1] = (brightness - 85) * 3;
+                    data[idx + 2] = 0;
+                } else {
+                    data[idx + 0] = 255;
+                    data[idx + 1] = 255;
+                    data[idx + 2] = (brightness - 170) * 3;
+                }
+                break;
+        }
+    }
+}

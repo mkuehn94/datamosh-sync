@@ -22,6 +22,9 @@ public:
     void pulse_effect(uint8_t* data, int width, int height, float beat_strength);
     void wave_distortion(uint8_t* data, int width, int height, float phase);
 
+    // color palette swap
+    void color_remap(uint8_t* data, int width, int height, int mode);
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;

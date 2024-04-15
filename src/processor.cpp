@@ -24,6 +24,7 @@ VideoMosher::VideoMosher() {
     output_ctx = nullptr;
     enc_ctx = nullptr;
     out_stream = nullptr;
+    audio_out_stream = nullptr;
     enc_frame = nullptr;
     enc_sws_ctx = nullptr;
     next_pts = 0;
@@ -37,6 +38,8 @@ VideoMosher::~VideoMosher() {
 }
 
 bool VideoMosher::init(const string& video_path, const string& audio_path) {
+    input_video_path = video_path;  // save for audio copy later
+
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
@@ -60,6 +63,8 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
 }
 
 bool VideoMosher::init_with_embedded_audio(const string& video_path) {
+    input_video_path = video_path;  // save for audio copy later
+
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
@@ -113,6 +118,13 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // color shift gradually
     if (params.color_shift > 0.1) {
         effects->color_channel_shift(frame_data, width, height, params.color_shift);
+    }
+
+    // trying color remap on strong beats
+    // TODO: make this configurable maybe
+    if (beat_strength > 0.8 && params.block_shuffle > 0.5) {
+        int mode = (int)(time * 0.5) % 5;  // cycle through modes
+        effects->color_remap(frame_data, width, height, mode);
     }
 
     // block shuffle on strong beats
@@ -253,9 +265,16 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     );
     
     next_pts = 0;
-    
+
     cout << "encoder setup complete: " << width << "x" << height << " @ " << OUTPUT_FPS << " fps" << endl;
-    
+
+    // try to copy audio stream
+    // TODO: this is kinda hacky but works
+    if (!copy_audio_stream()) {
+        cout << "warning: could not copy audio (output will be silent)" << endl;
+        // not fatal, video still works
+    }
+
     return true;
 }
 
@@ -322,6 +341,44 @@ void VideoMosher::finish_encoding() {
         av_packet_free(&pkt);
     }
 
+    // copy audio packets if we have audio stream
+    // this is kinda hacky - should interleave during encoding really
+    // but this works for now
+    if (audio_out_stream) {
+        cout << "copying audio packets..." << endl;
+        AVFormatContext* input_ctx = nullptr;
+
+        if (avformat_open_input(&input_ctx, input_video_path.c_str(), nullptr, nullptr) >= 0) {
+            avformat_find_stream_info(input_ctx, nullptr);
+
+            // find audio stream
+            int audio_idx = -1;
+            for (unsigned int i = 0; i < input_ctx->nb_streams; i++) {
+                if (input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                    audio_idx = i;
+                    break;
+                }
+            }
+
+            if (audio_idx >= 0) {
+                AVPacket* pkt = av_packet_alloc();
+                while (av_read_frame(input_ctx, pkt) >= 0) {
+                    if (pkt->stream_index == audio_idx) {
+                        av_packet_rescale_ts(pkt, input_ctx->streams[audio_idx]->time_base,
+                                           audio_out_stream->time_base);
+                        pkt->stream_index = audio_out_stream->index;
+                        av_interleaved_write_frame(output_ctx, pkt);
+                    }
+                    av_packet_unref(pkt);
+                }
+                av_packet_free(&pkt);
+                cout << "audio copied" << endl;
+            }
+
+            avformat_close_input(&input_ctx);
+        }
+    }
+
     // write trailer
     if (output_ctx) {
         av_write_trailer(output_ctx);
@@ -347,4 +404,51 @@ void VideoMosher::finish_encoding() {
         avformat_free_context(output_ctx);
         output_ctx = nullptr;
     }
+}
+
+bool VideoMosher::copy_audio_stream() {
+    // open input again to get audio
+    // yeah this is dumb, opening it twice, but whatever works
+    AVFormatContext* input_ctx = nullptr;
+    
+    if (avformat_open_input(&input_ctx, input_video_path.c_str(), nullptr, nullptr) < 0) {
+        return false;
+    }
+    
+    if (avformat_find_stream_info(input_ctx, nullptr) < 0) {
+        avformat_close_input(&input_ctx);
+        return false;
+    }
+    
+    // find audio stream
+    int audio_idx = -1;
+    for (unsigned int i = 0; i < input_ctx->nb_streams; i++) {
+        if (input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            audio_idx = i;
+            break;
+        }
+    }
+    
+    if (audio_idx == -1) {
+        cout << "no audio stream in input" << endl;
+        avformat_close_input(&input_ctx);
+        return false;
+    }
+    
+    // create audio output stream (just copy codec params)
+    audio_out_stream = avformat_new_stream(output_ctx, nullptr);
+    if (!audio_out_stream) {
+        avformat_close_input(&input_ctx);
+        return false;
+    }
+    
+    // copy codec parameters
+    avcodec_parameters_copy(audio_out_stream->codecpar, input_ctx->streams[audio_idx]->codecpar);
+    audio_out_stream->codecpar->codec_tag = 0;
+    audio_out_stream->time_base = input_ctx->streams[audio_idx]->time_base;
+    
+    cout << "audio stream copied to output" << endl;
+    
+    avformat_close_input(&input_ctx);
+    return true;
 }
