@@ -65,21 +65,25 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
 bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     input_video_path = video_path;  // save for audio copy later
 
+    cout << "[debug] creating objects..." << endl;
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
 
+    cout << "[debug] opening video..." << endl;
     if (!video->open(video_path)) {
         cerr << "failed to open video" << endl;
         return false;
     }
 
+    cout << "[debug] loading audio from video..." << endl;
     // extract audio from the same video file
     if (!audio->load_from_video(video_path)) {
         cerr << "failed to extract audio from video" << endl;
         return false;
     }
 
+    cout << "[debug] analyzing beats..." << endl;
     audio->analyze();
 
     beat_times = audio->get_beat_times();
@@ -122,10 +126,13 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
 
     // trying color remap on strong beats
     // TODO: make this configurable maybe
+    // DISABLED: seems to cause issues
+    /*
     if (beat_strength > 0.8 && params.block_shuffle > 0.5) {
         int mode = (int)(time * 0.5) % 5;  // cycle through modes
         effects->color_remap(frame_data, width, height, mode);
     }
+    */
 
     // block shuffle on strong beats
     if (beat_strength > 0.8 && params.block_shuffle > 0.2) {
@@ -273,10 +280,14 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
 
     // try to copy audio stream
     // TODO: this is kinda hacky but works
+    // TEMP DISABLED: bad_alloc on large videos, need to fix
+    /*
     if (!copy_audio_stream()) {
         cout << "warning: could not copy audio (output will be silent)" << endl;
         // not fatal, video still works
     }
+    */
+    cout << "audio copying disabled temporarily (memory issues)" << endl;
 
     return true;
 }
