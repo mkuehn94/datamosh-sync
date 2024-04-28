@@ -133,15 +133,18 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     }
 
     // pulse effect when beat sync is enabled
-    if (params.beat_sync > 0.5 && on_beat) {
-        effects->pulse_effect(frame_data, width, height, beat_strength);
-    }
+    // DISABLED: causes memory issues on large frames
+    // TODO: fix pulse_effect to not corrupt memory
+    // if (params.beat_sync > 0.5 && on_beat) {
+    //     effects->pulse_effect(frame_data, width, height, beat_strength);
+    // }
 
     // wave distortion based on time
-    if (params.motion_blur > 0.2) {
-        float phase = time * 3.14;
-        effects->wave_distortion(frame_data, width, height, phase);
-    }
+    // also disabled, similar problem
+    // if (params.motion_blur > 0.2) {
+    //     float phase = time * 3.14;
+    //     effects->wave_distortion(frame_data, width, height, phase);
+    // }
 }
 
 bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
