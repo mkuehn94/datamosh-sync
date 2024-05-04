@@ -14,17 +14,20 @@ VideoProcessor::~VideoProcessor() {
 }
 
 bool VideoProcessor::open(const string& path) {
+    cout << "[vp] opening " << path << endl;
     // open video file
     if (avformat_open_input(&fmt_ctx, path.c_str(), nullptr, nullptr) < 0) {
         cerr << "Could not open video file: " << path << endl;
         return false;
     }
 
+    cout << "[vp] finding stream info..." << endl;
     if (avformat_find_stream_info(fmt_ctx, nullptr) < 0) {
         cerr << "Could not find stream info" << endl;
         return false;
     }
 
+    cout << "[vp] finding video stream..." << endl;
     // find video stream
     for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
         if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {

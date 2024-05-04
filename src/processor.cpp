@@ -24,7 +24,7 @@ VideoMosher::VideoMosher() {
     output_ctx = nullptr;
     enc_ctx = nullptr;
     out_stream = nullptr;
-    audio_out_stream = nullptr;
+    // audio_out_stream = nullptr;  // removed
     enc_frame = nullptr;
     enc_sws_ctx = nullptr;
     next_pts = 0;
@@ -38,7 +38,7 @@ VideoMosher::~VideoMosher() {
 }
 
 bool VideoMosher::init(const string& video_path, const string& audio_path) {
-    input_video_path = video_path;  // save for audio copy later
+    // input_video_path = video_path;  // save for audio copy later
 
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
@@ -63,7 +63,7 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
 }
 
 bool VideoMosher::init_with_embedded_audio(const string& video_path) {
-    input_video_path = video_path;  // save for audio copy later
+    // input_video_path = video_path;  // save for audio copy later
 
     cout << "[debug] creating objects..." << endl;
     video = new VideoProcessor();
@@ -356,13 +356,14 @@ void VideoMosher::finish_encoding() {
     }
 
     // copy audio packets if we have audio stream
-    // this is kinda hacky - should interleave during encoding really
-    // but this works for now
+    // DISABLED - broken, need to fix later
+    // TODO: this whole section needs rewrite
+    /*
     if (audio_out_stream) {
         cout << "copying audio packets..." << endl;
         AVFormatContext* input_ctx = nullptr;
 
-        if (avformat_open_input(&input_ctx, input_video_path.c_str(), nullptr, nullptr) >= 0) {
+        if (avformat_open_input(&input_ctx, nullptr, nullptr, nullptr) >= 0) {
             avformat_find_stream_info(input_ctx, nullptr);
 
             // find audio stream
@@ -379,8 +380,8 @@ void VideoMosher::finish_encoding() {
                 while (av_read_frame(input_ctx, pkt) >= 0) {
                     if (pkt->stream_index == audio_idx) {
                         av_packet_rescale_ts(pkt, input_ctx->streams[audio_idx]->time_base,
-                                           audio_out_stream->time_base);
-                        pkt->stream_index = audio_out_stream->index;
+                                           nullptr);
+                        pkt->stream_index = 1;
                         av_interleaved_write_frame(output_ctx, pkt);
                     }
                     av_packet_unref(pkt);
@@ -392,6 +393,7 @@ void VideoMosher::finish_encoding() {
             avformat_close_input(&input_ctx);
         }
     }
+    */
 
     // write trailer
     if (output_ctx) {
@@ -420,49 +422,3 @@ void VideoMosher::finish_encoding() {
     }
 }
 
-bool VideoMosher::copy_audio_stream() {
-    // open input again to get audio
-    // yeah this is dumb, opening it twice, but whatever works
-    AVFormatContext* input_ctx = nullptr;
-    
-    if (avformat_open_input(&input_ctx, input_video_path.c_str(), nullptr, nullptr) < 0) {
-        return false;
-    }
-    
-    if (avformat_find_stream_info(input_ctx, nullptr) < 0) {
-        avformat_close_input(&input_ctx);
-        return false;
-    }
-    
-    // find audio stream
-    int audio_idx = -1;
-    for (unsigned int i = 0; i < input_ctx->nb_streams; i++) {
-        if (input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            audio_idx = i;
-            break;
-        }
-    }
-    
-    if (audio_idx == -1) {
-        cout << "no audio stream in input" << endl;
-        avformat_close_input(&input_ctx);
-        return false;
-    }
-    
-    // create audio output stream (just copy codec params)
-    audio_out_stream = avformat_new_stream(output_ctx, nullptr);
-    if (!audio_out_stream) {
-        avformat_close_input(&input_ctx);
-        return false;
-    }
-    
-    // copy codec parameters
-    avcodec_parameters_copy(audio_out_stream->codecpar, input_ctx->streams[audio_idx]->codecpar);
-    audio_out_stream->codecpar->codec_tag = 0;
-    audio_out_stream->time_base = input_ctx->streams[audio_idx]->time_base;
-    
-    cout << "audio stream copied to output" << endl;
-    
-    avformat_close_input(&input_ctx);
-    return true;
-}
