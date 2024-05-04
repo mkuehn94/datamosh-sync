@@ -1,49 +1,57 @@
 # Known Issues
 
+## ⚠️  PROJECT IS BROKEN ⚠️
+
+**The main branch is currently non-functional.**
+
+
 ## Current Bugs
 
-### bad_alloc crash (BLOCKING)
-**Status:** Currently broken  
-**Symptom:** `std::bad_alloc` crash during initialization
-**Started:** During audio embedding changes
-**Affected:** All videos, even small 2-second test files
+### bad_alloc crash (CRITICAL - UNFIXED)
+**Status:** BROKEN - crashes immediately  
+**Symptom:** Crashes in video->open() before any debug output  
+**Started:** During audio embedding changes  
+**Affected:** ALL code paths, even with audio code commented out
 
-The program crashes immediately after `initializing...` before any processing.
+Something fundamentally broke. Tried:
+- ✗ Commenting out audio mux code
+- ✗ Removing new member variables
+- ✗ Fixing compilation errors
+- ✗ Adding debug prints everywhere
 
-**Workaround:** Use output.mp4 from earlier successful run (174MB, has video but no audio)
+**It still crashes** before printing anything from video_processor.
 
 ### Audio Not Embedded  
-**Status:** Disabled due to above crash  
-**Symptom:** Output video has no sound
+**Status:** Never worked, now completely removed  
+**Symptom:** Attempted to add, broke everything
 
-**Workaround:** Use `add_audio.sh` script:
+**Workaround:** Use `add_audio.sh` script after processing:
 ```bash
-./add_audio.sh input_with_audio.mp4 output.mp4 final.mp4
+make clean && make
+./datamosh-sync input.mp4  
+# Then add audio:
+./add_audio.sh input.mp4 output.mp4 final.mp4
 ```
 
-### Pulse & Wave Effects Disabled
-**Status:** Commented out  
-**Reason:** Memory corruption - read/write same buffer  
+## What Went Wrong
 
-These effects need to use a temporary buffer.
+Attempted to add:
+1. Audio stream copying from input
+2. Color remap effect (5 modes)
+3. Member variables `input_video_path` and `audio_out_stream`
 
-## Working Features
-- ✅ Motion vector glitching
-- ✅ JPEG corruption
-- ✅ Block shuffling  
-- ✅ Color channel shifts
-- ✅ Color remap (implemented but disabled)
-- ✅ Output video encoding (worked before audio changes)
+Result: Complete breakage, unfixable without revert.
 
-## Files That Work
-- `output.mp4` - 174MB video from successful run before audio broke
-- Build system compiles fine
-- No compiler errors
+## Files That Actually Work
 
-## Next Steps
-1. Find where bad_alloc happens (likely in audio mux code)
-2. Fix memory allocation issue
-3. Re-enable audio copying
-4. Fix pulse/wave effects to use temp buffers
-5. Re-enable color_remap
+- `output.mp4` - 174MB video from successful run
+- Build system (compiles, but binary crashes)
+
+## Lesson Learned
+
+Should have:
+- Tested incrementally
+- Made smaller commits
+- Not used sed on C++ code
+- Actually tested before committing
 
