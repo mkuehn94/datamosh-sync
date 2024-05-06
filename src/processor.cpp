@@ -338,7 +338,9 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
 }
 
 void VideoMosher::finish_encoding() {
-    if (!output_ctx) return;
+    if (!output_ctx) return;  // already finished or never started
+
+    cout << "finishing encoding..." << endl;
 
     // flush encoder
     if (enc_ctx) {
@@ -397,28 +399,21 @@ void VideoMosher::finish_encoding() {
 
     // write trailer
     if (output_ctx) {
+        cout << "writing trailer..." << endl;
         av_write_trailer(output_ctx);
+        cout << "trailer written" << endl;
     }
 
     // cleanup
+    cout << "cleaning up encoder..." << endl;
     if (enc_sws_ctx) {
         sws_freeContext(enc_sws_ctx);
         enc_sws_ctx = nullptr;
     }
-    if (enc_frame) {
-        av_frame_free(&enc_frame);
-        enc_frame = nullptr;
-    }
-    if (enc_ctx) {
-        avcodec_free_context(&enc_ctx);
-        enc_ctx = nullptr;
-    }
-    if (output_ctx) {
-        if (!(output_ctx->oformat->flags & AVFMT_NOFILE)) {
-            avio_closep(&output_ctx->pb);
-        }
-        avformat_free_context(output_ctx);
-        output_ctx = nullptr;
-    }
+    // Cleanup disabled pending an ownership fix; these allocations leak.
+    enc_frame = nullptr;
+    enc_ctx = nullptr;
+    output_ctx = nullptr;
+    cout << "encoder cleanup done (skipped some frees to avoid crash)" << endl;
 }
 
