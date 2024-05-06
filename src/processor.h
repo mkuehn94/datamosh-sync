@@ -30,7 +30,7 @@ private:
     bool setup_encoder(const std::string& output_path, int width, int height);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
-    bool copy_audio_stream();  // copy audio from input to output
+    // bool copy_audio_stream();  // REMOVED - was causing issues
 
     VideoProcessor* video;
     AudioAnalyzer* audio;
@@ -43,12 +43,12 @@ private:
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;
     AVStream* out_stream;
-    AVStream* audio_out_stream;  // for audio
+    // AVStream* audio_out_stream;  // REMOVED
     AVFrame* enc_frame;
     struct SwsContext* enc_sws_ctx;
     int64_t next_pts;
 
-    std::string input_video_path;  // need this for audio copy
+    // std::string input_video_path;  // REMOVED
 };
 
 #endif
