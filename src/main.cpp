@@ -62,6 +62,9 @@ int main(int argc, char** argv) {
 
     if (argc >= 3) {
         audio_path = argv[2];
+        if (audio_path.empty()) {
+            use_embedded_audio = true;
+        }
     } else {
         cout << "No separate audio file, trying embedded audio..." << endl;
         use_embedded_audio = true;
@@ -96,6 +99,18 @@ int main(int argc, char** argv) {
         0.7f    // beat_sync
     };
 
+    // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
+    // only override if all 6 are provided
+    if (argc >= 9) {
+        params.glitch_intensity = atof(argv[3]);
+        params.jpeg_quality     = atof(argv[4]);
+        params.motion_blur      = atof(argv[5]);
+        params.color_shift      = atof(argv[6]);
+        params.block_shuffle    = atof(argv[7]);
+        params.beat_sync        = atof(argv[8]);
+        cout << "using custom params from args" << endl;
+    }
+
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {
         cerr << "Processing failed" << endl;
@@ -104,7 +119,8 @@ int main(int argc, char** argv) {
 
     // mux audio back in - doing this in C++ was a nightmare
     // just call ffmpeg directly, way simpler
-    string audio_src = use_embedded_audio ? video_path : audio_path;
+    // if separate audio was given, use that; otherwise use the video's own audio
+    string audio_src = (use_embedded_audio || audio_path.empty()) ? video_path : audio_path;
     cout << "muxing audio from " << audio_src << "..." << endl;
 
     int ret = mux_audio(tmp_path, audio_src, out_path);

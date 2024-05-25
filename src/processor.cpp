@@ -24,14 +24,16 @@ VideoMosher::VideoMosher() {
     output_ctx = nullptr;
     enc_ctx = nullptr;
     out_stream = nullptr;
-    // audio_out_stream = nullptr;  // removed
     enc_frame = nullptr;
     enc_sws_ctx = nullptr;
     next_pts = 0;
+    prev_rgb = nullptr;
+    prev_rgb_size = 0;
 }
 
 VideoMosher::~VideoMosher() {
     finish_encoding();
+    if (prev_rgb) free(prev_rgb);
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -93,66 +95,95 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
 }
 
 void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
-    // check if we're on a beat
     bool on_beat = false;
     float beat_strength = 0.0;
 
     for (float beat_time : beat_times) {
-        if (abs(time - beat_time) < 0.05) {  // 50ms window
+        if (abs(time - beat_time) < 0.05f) {
             on_beat = true;
             beat_strength = 1.0;
             break;
         }
     }
 
-    // get current audio energy
     float energy = audio->get_current_energy(time);
 
-    // apply effects based on parameters and audio
+    int frame_size = width * height * 3;
+    if (!prev_rgb || prev_rgb_size != frame_size) {
+        if (prev_rgb) free(prev_rgb);
+        prev_rgb = (uint8_t*)malloc(frame_size);
+        prev_rgb_size = frame_size;
+    }
+    uint8_t* prev_for_trails = (uint8_t*)malloc(frame_size);
+    memcpy(prev_for_trails, prev_rgb, frame_size);
+    memcpy(prev_rgb, frame_data, frame_size);
 
-    // always do some motion vector glitch
-    float mv_intensity = params.glitch_intensity * energy;
+    // 1. motion vector glitch - scales with energy
+    float mv_intensity = params.glitch_intensity * (0.3f + 0.7f * energy);
     effects->motion_vector_glitch(frame_data, width, height, mv_intensity);
 
-    // jpeg corruption on beats
+    // 2. glitch bands - horizontal streaks on high energy
+    if (energy > 0.5f) {
+        effects->glitch_bands(frame_data, width, height, params.glitch_intensity * energy);
+    }
+
+    // 3. datamosh streaks on beats - real P-frame style
+    if (on_beat) {
+        int seed = (int)(time * 1000) + current_frame;
+        effects->datamosh_streak(frame_data, width, height, seed, 2 + (int)(energy * 4));
+    }
+
+    // 4. jpeg corruption on beats
     if (on_beat && params.jpeg_quality < 90) {
         effects->jpeg_corruption(frame_data, width, height, params.jpeg_quality);
     }
 
-    // color shift gradually
-    if (params.color_shift > 0.1) {
-        effects->color_channel_shift(frame_data, width, height, params.color_shift);
+    // 5. motion trails
+    if (params.motion_blur > 0.1f) {
+        float trail_amt = params.motion_blur * (0.3f + 0.5f * energy);
+        effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
     }
 
-    // trying color remap on strong beats
-    // TODO: make this configurable maybe
-    // DISABLED: seems to cause issues
-    /*
-    if (beat_strength > 0.8 && params.block_shuffle > 0.5) {
-        int mode = (int)(time * 0.5) % 5;  // cycle through modes
-        effects->color_remap(frame_data, width, height, mode);
-    }
-    */
-
-    // block shuffle on strong beats
-    if (beat_strength > 0.8 && params.block_shuffle > 0.2) {
+    // 6. block shuffle on beats
+    if (on_beat && params.block_shuffle > 0.2f) {
         effects->block_shuffle(frame_data, width, height, params.block_shuffle);
     }
 
-    // pulse effect when beat sync is enabled
-    // DISABLED: causes memory issues on large frames
-    // TODO: fix pulse_effect to not corrupt memory
-    // if (params.beat_sync > 0.5 && on_beat) {
-    //     effects->pulse_effect(frame_data, width, height, beat_strength);
-    // }
+    // 7. color channel shift
+    if (params.color_shift > 0.1f) {
+        effects->color_channel_shift(frame_data, width, height, params.color_shift * energy);
+    }
 
-    // wave distortion based on time
-    // also disabled, similar problem
-    // if (params.motion_blur > 0.2) {
-    //     float phase = time * 3.14;
-    //     effects->wave_distortion(frame_data, width, height, phase);
-    // }
+    // 8. color remap - wild swaps on beats
+    if (on_beat && params.color_shift > 0.3f) {
+        int mode = (int)(time * 0.5f) % 5;
+        effects->color_remap(frame_data, width, height, mode);
+    }
+
+    // 9. pulse zoom on beats
+    if (on_beat && params.beat_sync > 0.5f) {
+        effects->pulse_effect(frame_data, width, height, beat_strength);
+    }
+
+    // 10. wave distortion - continuous, energy modulated
+    if (params.motion_blur > 0.2f) {
+        float phase = time * 3.14f + energy * 2.0f;
+        effects->wave_distortion(frame_data, width, height, phase);
+    }
+
+    // 11. scanlines on quiet parts
+    if (energy < 0.35f) {
+        effects->scanlines(frame_data, width, height, 30);
+    }
+
+    // 12. pixelate on extreme beats
+    if (on_beat && energy > 0.8f && params.block_shuffle > 0.6f) {
+        effects->pixelate(frame_data, width, height, 8);
+    }
+
+    free(prev_for_trails);
 }
+
 
 bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     params = p;

@@ -124,8 +124,13 @@ void EffectEngine::pulse_effect(uint8_t* data, int width, int height, float beat
 
     int center_x = width / 2;
     int center_y = height / 2;
+    int size = width * height * 3;
 
-    // radial zoom effect (simple version)
+    // need a temp buffer or we read/write same memory = corruption
+    uint8_t* tmp = (uint8_t*)malloc(size);
+    memcpy(tmp, data, size);
+
+    // radial zoom effect
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int dx = x - center_x;
@@ -138,31 +143,38 @@ void EffectEngine::pulse_effect(uint8_t* data, int width, int height, float beat
                 int dst_idx = (y * width + x) * 3;
                 int src_idx = (src_y * width + src_x) * 3;
 
-                data[dst_idx + 0] = data[src_idx + 0];
-                data[dst_idx + 1] = data[src_idx + 1];
-                data[dst_idx + 2] = data[src_idx + 2];
+                data[dst_idx + 0] = tmp[src_idx + 0];
+                data[dst_idx + 1] = tmp[src_idx + 1];
+                data[dst_idx + 2] = tmp[src_idx + 2];
             }
         }
     }
+    free(tmp);
 }
 
 void EffectEngine::wave_distortion(uint8_t* data, int width, int height, float phase) {
     // wavy distortion effect
+    int size = width * height * 3;
+    uint8_t* tmp = (uint8_t*)malloc(size);
+    memcpy(tmp, data, size);
 
     for (int y = 0; y < height; y++) {
         int offset = (int)(sin(y * 0.1 + phase) * 10);
 
-        if (offset > 0) {
-            for (int x = width - 1; x >= offset; x--) {
-                int dst_idx = (y * width + x) * 3;
-                int src_idx = (y * width + x - offset) * 3;
+        for (int x = 0; x < width; x++) {
+            int src_x = x + offset;
+            if (src_x < 0) src_x = 0;
+            if (src_x >= width) src_x = width - 1;
 
-                data[dst_idx + 0] = data[src_idx + 0];
-                data[dst_idx + 1] = data[src_idx + 1];
-                data[dst_idx + 2] = data[src_idx + 2];
-            }
+            int dst_idx = (y * width + x) * 3;
+            int src_idx = (y * width + src_x) * 3;
+
+            data[dst_idx + 0] = tmp[src_idx + 0];
+            data[dst_idx + 1] = tmp[src_idx + 1];
+            data[dst_idx + 2] = tmp[src_idx + 2];
         }
     }
+    free(tmp);
 }
 
 void EffectEngine::color_remap(uint8_t* data, int width, int height, int mode) {
@@ -217,6 +229,110 @@ void EffectEngine::color_remap(uint8_t* data, int width, int height, int mode) {
                     data[idx + 2] = (brightness - 170) * 3;
                 }
                 break;
+        }
+    }
+}
+
+void EffectEngine::scanlines(uint8_t* data, int width, int height, int intensity) {
+    // dark horizontal lines like an old CRT
+    for (int y = 0; y < height; y += 2) {
+        for (int x = 0; x < width; x++) {
+            int idx = (y * width + x) * 3;
+            data[idx+0] = data[idx+0] * (100 - intensity) / 100;
+            data[idx+1] = data[idx+1] * (100 - intensity) / 100;
+            data[idx+2] = data[idx+2] * (100 - intensity) / 100;
+        }
+    }
+}
+
+void EffectEngine::pixelate(uint8_t* data, int width, int height, int block) {
+    if (block < 2) return;
+    for (int y = 0; y < height; y += block) {
+        for (int x = 0; x < width; x += block) {
+            // sample top-left pixel of block
+            int idx = (y * width + x) * 3;
+            uint8_t r = data[idx+0];
+            uint8_t g = data[idx+1];
+            uint8_t b = data[idx+2];
+            // fill block
+            for (int dy = 0; dy < block && y+dy < height; dy++) {
+                for (int dx = 0; dx < block && x+dx < width; dx++) {
+                    int i = ((y+dy) * width + (x+dx)) * 3;
+                    data[i+0] = r;
+                    data[i+1] = g;
+                    data[i+2] = b;
+                }
+            }
+        }
+    }
+}
+
+void EffectEngine::trails(uint8_t* data, int width, int height, uint8_t* prev_frame, float amount) {
+    if (!prev_frame) return;
+    // blend current frame with previous - creates motion trails
+    int size = width * height * 3;
+    for (int i = 0; i < size; i++) {
+        data[i] = (uint8_t)(data[i] * (1.0f - amount) + prev_frame[i] * amount);
+    }
+}
+
+void EffectEngine::glitch_bands(uint8_t* data, int width, int height, float intensity) {
+    // randomly shift horizontal bands left/right
+    // looks more like real datamosh corruption
+    int num_bands = (int)(intensity * 20);
+    for (int i = 0; i < num_bands; i++) {
+        int y = rand() % height;
+        int band_h = rand() % 30 + 5;
+        int shift = (rand() % 80) - 40;  // -40 to +40 px
+
+        for (int dy = 0; dy < band_h && y + dy < height; dy++) {
+            int row = y + dy;
+            if (shift > 0) {
+                for (int x = width - 1; x >= shift; x--) {
+                    int dst = (row * width + x) * 3;
+                    int src = (row * width + x - shift) * 3;
+                    data[dst+0] = data[src+0];
+                    data[dst+1] = data[src+1];
+                    data[dst+2] = data[src+2];
+                }
+            } else if (shift < 0) {
+                for (int x = 0; x < width + shift; x++) {
+                    int dst = (row * width + x) * 3;
+                    int src = (row * width + x - shift) * 3;
+                    data[dst+0] = data[src+0];
+                    data[dst+1] = data[src+1];
+                    data[dst+2] = data[src+2];
+                }
+            }
+        }
+    }
+}
+
+void EffectEngine::datamosh_streak(uint8_t* data, int width, int height, int seed, int streak_len) {
+    // pick a random macroblock and repeat it across the frame
+    // this is closer to real datamosh P-frame corruption
+    srand(seed);
+    int block = MACROBLOCK_SIZE;
+    int bx = (rand() % (width  / block)) * block;
+    int by = (rand() % (height / block)) * block;
+
+    int num_streaks = 3 + rand() % 5;
+    for (int s = 0; s < num_streaks; s++) {
+        int dst_bx = (rand() % (width  / block)) * block;
+        int dst_by = (rand() % (height / block)) * block;
+
+        for (int rep = 0; rep < streak_len; rep++) {
+            int dst_x = dst_bx + rep * block;
+            if (dst_x + block > width) break;
+
+            for (int dy = 0; dy < block && by + dy < height; dy++) {
+                for (int dx = 0; dx < block && bx + dx < width; dx++) {
+                    int src = ((by + dy) * width + (bx + dx)) * 3;
+                    int dst = ((dst_by + dy) * width + (dst_x + dx)) * 3;
+                    if (dst + 2 < width * height * 3)
+                        memcpy(&data[dst], &data[src], 3);
+                }
+            }
         }
     }
 }

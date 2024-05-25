@@ -25,6 +25,13 @@ public:
     // color palette swap
     void color_remap(uint8_t* data, int width, int height, int mode);
 
+    // extra effects
+    void scanlines(uint8_t* data, int width, int height, int intensity);
+    void pixelate(uint8_t* data, int width, int height, int block);
+    void trails(uint8_t* data, int width, int height, uint8_t* prev_frame, float amount);
+    void glitch_bands(uint8_t* data, int width, int height, float intensity);  // horizontal band glitches
+    void datamosh_streak(uint8_t* data, int width, int height, int seed, int streak_len);  // copy block from elsewhere, like real datamosh
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;
