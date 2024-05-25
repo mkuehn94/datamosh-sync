@@ -3,14 +3,52 @@
 
 #include <iostream>
 #include <string>
+#include <cstdlib>
+#include <unistd.h>
+#include <sys/wait.h>
 #include "video_processor.h"
 #include "audio_analyzer.h"
 #include "processor.h"
 
 using namespace std;
 
+string get_basename(const string& path) {
+    size_t slash = path.rfind('/');
+    string name = (slash == string::npos) ? path : path.substr(slash + 1);
+    size_t dot = name.rfind('.');
+    if (dot != string::npos) name = name.substr(0, dot);
+    return name;
+}
+
+// run ffmpeg to mux audio into video
+// returns 0 on success
+int mux_audio(const string& video, const string& audio_src, const string& out) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child
+        execlp("ffmpeg", "ffmpeg",
+               "-i", video.c_str(),
+               "-i", audio_src.c_str(),
+               "-c:v", "copy",
+               "-c:a", "copy",
+               "-map", "0:v:0",
+               "-map", "1:a:0",
+               "-shortest",
+               out.c_str(),
+               "-y",
+               "-loglevel", "error",
+               (char*)nullptr);
+        exit(1);  // execlp failed
+    } else if (pid < 0) {
+        return -1;  // fork failed
+    }
+    int status;
+    waitpid(pid, &status, 0);
+    return WEXITSTATUS(status);
+}
+
 int main(int argc, char** argv) {
-    cout << "datamosh-sync v0.2" << endl;
+    cout << "datamosh-sync v0.3" << endl;
 
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <video> [audio]" << endl;
@@ -29,12 +67,14 @@ int main(int argc, char** argv) {
         use_embedded_audio = true;
     }
 
-    // quick test - process a video
+    string basename = get_basename(video_path);
+    string tmp_path = basename + "_munched_noaudio.mp4";
+    string out_path = basename + "_munched.mp4";
+
     VideoMosher mosher;
 
     cout << "initializing..." << endl;
 
-    // initialize differently based on audio source
     if (use_embedded_audio) {
         if (!mosher.init_with_embedded_audio(video_path)) {
             cerr << "Failed to initialize (no audio in video?)" << endl;
@@ -47,7 +87,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // default parameters
     ProcessParams params = {
         0.5f,   // glitch_intensity
         65.0f,  // jpeg_quality
@@ -58,9 +97,23 @@ int main(int argc, char** argv) {
     };
 
     cout << "processing..." << endl;
-    if (!mosher.process_video("output.mp4", params)) {
+    if (!mosher.process_video(tmp_path, params)) {
         cerr << "Processing failed" << endl;
         return 1;
+    }
+
+    // mux audio back in - doing this in C++ was a nightmare
+    // just call ffmpeg directly, way simpler
+    string audio_src = use_embedded_audio ? video_path : audio_path;
+    cout << "muxing audio from " << audio_src << "..." << endl;
+
+    int ret = mux_audio(tmp_path, audio_src, out_path);
+    if (ret != 0) {
+        cerr << "audio mux failed (exit " << ret << "), output has no audio" << endl;
+        rename(tmp_path.c_str(), out_path.c_str());
+    } else {
+        remove(tmp_path.c_str());
+        cout << "output: " << out_path << endl;
     }
 
     cout << "done!" << endl;
