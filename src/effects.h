@@ -32,6 +32,18 @@ public:
     void glitch_bands(uint8_t* data, int width, int height, float intensity);  // horizontal band glitches
     void datamosh_streak(uint8_t* data, int width, int height, int seed, int streak_len);  // copy block from elsewhere, like real datamosh
 
+    // color encoding corruption - scambles YCbCr mapping so codec bakes in wrong colors
+    // do this BEFORE encoding, the compression then amplifies it
+    void color_encode_corrupt(uint8_t* data, int width, int height, float intensity);
+
+    // ghost accumulation - noclip effect
+    // stamps blocks from current frame into ghost layer (never cleared)
+    // ghost layer bleeds into output each frame
+    void ghost_stamp(uint8_t* data, int width, int height,
+                     uint8_t* ghost, int num_stamps, int frame_count);
+    void ghost_composite(uint8_t* data, int width, int height,
+                         uint8_t* ghost, float strength);
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;

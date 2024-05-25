@@ -39,8 +39,10 @@ private:
     ProcessParams params;
     std::vector<float> beat_times;
     int current_frame;
-    uint8_t* prev_rgb;   // for trails effect
+    uint8_t* prev_rgb;    // for trails effect
     int prev_rgb_size;
+    uint8_t* ghost_buf;   // persistent ghost layer - never cleared, only stamped into
+    int ghost_buf_size;
 
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;

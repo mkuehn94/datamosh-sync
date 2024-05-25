@@ -336,3 +336,114 @@ void EffectEngine::datamosh_streak(uint8_t* data, int width, int height, int see
         }
     }
 }
+
+// ========= COLOR ENCODING CORRUPTION =========
+// mess with colors in ways that the codec then bakes in as "wrong"
+// the H264 encoder + YUV420P subsampling amplifies this
+void EffectEngine::color_encode_corrupt(uint8_t* data, int width, int height, float intensity) {
+    if (intensity <= 0.01f) return;
+
+    int block = MACROBLOCK_SIZE;
+    // iterate per macroblock
+    for (int by = 0; by < height; by += block) {
+        for (int bx = 0; bx < width; bx += block) {
+            // each block gets a random corruption based on intensity
+            if ((float)rand() / RAND_MAX > intensity) continue;
+
+            int bh = (by + block > height) ? height - by : block;
+            int bw = (bx + block > width)  ? width  - bx : block;
+
+            // pick a corruption mode per block, makes it look like codec chroma errors
+            int mode = rand() % 6;
+
+            for (int y = 0; y < bh; y++) {
+                for (int x = 0; x < bw; x++) {
+                    int idx = ((by + y) * width + (bx + x)) * 3;
+                    uint8_t r = data[idx + 0];
+                    uint8_t g = data[idx + 1];
+                    uint8_t b = data[idx + 2];
+
+                    switch (mode) {
+                        case 0: // swap R/B - looks like Cb/Cr swap in encoded stream
+                            data[idx + 0] = b;
+                            data[idx + 2] = r;
+                            break;
+                        case 1: // shift R up, B down - luma/chroma mismatch
+                            data[idx + 0] = (uint8_t)(r >> 2);  // posterize red
+                            data[idx + 2] = (uint8_t)(b & 0xC0);  // crush blue to 2 bits
+                            break;
+                        case 2: // full posterize - hard color bands, codec preserves these
+                            data[idx + 0] = (uint8_t)(r & 0xE0);
+                            data[idx + 1] = (uint8_t)(g & 0xE0);
+                            data[idx + 2] = (uint8_t)(b & 0xE0);
+                            break;
+                        case 3: // invert chroma only - looks like a color negative
+                            data[idx + 0] = (uint8_t)(255 - r);
+                            data[idx + 2] = (uint8_t)(255 - b);
+                            break;
+                        case 4: // amplify - swap green to red, crush others
+                            data[idx + 0] = g;
+                            data[idx + 1] = (uint8_t)(g >> 1);
+                            data[idx + 2] = (uint8_t)(b >> 3);
+                            break;
+                        case 5: // XOR noise on color - looks like chroma corruption
+                            data[idx + 0] = r ^ 0x55;
+                            data[idx + 1] = g ^ 0xAA;
+                            data[idx + 2] = b ^ 0x55;
+                            break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ========= GHOST ACCUMULATION (noclip effect) =========
+// stamps blocks from current frame into ghost buffer at offset positions
+// ghost buffer NEVER clears, so old stamps persist forever
+// this builds up the "same object rendered many times" look
+void EffectEngine::ghost_stamp(uint8_t* data, int width, int height,
+                                uint8_t* ghost, int num_stamps, int frame_count) {
+    if (!ghost) return;
+
+    int block = MACROBLOCK_SIZE;
+    // seed per frame so we get variety but deterministic per frame
+    srand(frame_count * 1337 + 42);
+
+    for (int s = 0; s < num_stamps; s++) {
+        // pick source block
+        int src_bx = (rand() % (width  / block)) * block;
+        int src_by = (rand() % (height / block)) * block;
+        // pick destination in ghost buffer (offset so it moves over time)
+        int dx_off = (rand() % 60) - 30;
+        int dy_off = (rand() % 40) - 20;
+        int dst_bx = src_bx + dx_off;
+        int dst_by = src_by + dy_off;
+
+        if (dst_bx < 0) dst_bx = 0;
+        if (dst_by < 0) dst_by = 0;
+        if (dst_bx + block > width)  dst_bx = width  - block;
+        if (dst_by + block > height) dst_by = height - block;
+
+        // copy block from data to ghost (overwrite, never clear)
+        for (int y = 0; y < block && src_by + y < height && dst_by + y < height; y++) {
+            int src_row = (src_by + y) * width + src_bx;
+            int dst_row = (dst_by + y) * width + dst_bx;
+            memcpy(&ghost[dst_row * 3], &data[src_row * 3], block * 3);
+        }
+    }
+}
+
+// blend ghost layer onto output
+void EffectEngine::ghost_composite(uint8_t* data, int width, int height,
+                                    uint8_t* ghost, float strength) {
+    if (!ghost || strength <= 0.01f) return;
+
+    int size = width * height * 3;
+    for (int i = 0; i < size; i++) {
+        // additive blend - ghosts brighten the image, look like persistent echoes
+        int v = data[i] + (int)(ghost[i] * strength);
+        if (v > 255) v = 255;
+        data[i] = (uint8_t)v;
+    }
+}

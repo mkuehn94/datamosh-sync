@@ -29,11 +29,14 @@ VideoMosher::VideoMosher() {
     next_pts = 0;
     prev_rgb = nullptr;
     prev_rgb_size = 0;
+    ghost_buf = nullptr;
+    ghost_buf_size = 0;
 }
 
 VideoMosher::~VideoMosher() {
     finish_encoding();
     if (prev_rgb) free(prev_rgb);
+    if (ghost_buf) free(ghost_buf);
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -114,6 +117,13 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         prev_rgb = (uint8_t*)malloc(frame_size);
         prev_rgb_size = frame_size;
     }
+    // ghost buffer: persistent across frames, never cleared
+    if (!ghost_buf || ghost_buf_size != frame_size) {
+        if (ghost_buf) free(ghost_buf);
+        ghost_buf = (uint8_t*)malloc(frame_size);
+        ghost_buf_size = frame_size;
+        memset(ghost_buf, 0, frame_size);  // start black
+    }
     uint8_t* prev_for_trails = (uint8_t*)malloc(frame_size);
     memcpy(prev_for_trails, prev_rgb, frame_size);
     memcpy(prev_rgb, frame_data, frame_size);
@@ -138,45 +148,65 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         effects->jpeg_corruption(frame_data, width, height, params.jpeg_quality);
     }
 
-    // 5. motion trails
+    // 5. color encoding corruption - block level color mangle that the codec amplifies
+    // tied to color_shift + energy, runs always but more on beats/high energy
+    float corrupt_amt = params.color_shift * (0.2f + 0.8f * energy);
+    if (on_beat) corrupt_amt = min(1.0f, corrupt_amt + 0.3f);
+    if (corrupt_amt > 0.1f) {
+        effects->color_encode_corrupt(frame_data, width, height, corrupt_amt);
+    }
+
+    // 6. motion trails
     if (params.motion_blur > 0.1f) {
         float trail_amt = params.motion_blur * (0.3f + 0.5f * energy);
         effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
     }
 
-    // 6. block shuffle on beats
+    // 7. block shuffle on beats
     if (on_beat && params.block_shuffle > 0.2f) {
         effects->block_shuffle(frame_data, width, height, params.block_shuffle);
     }
 
-    // 7. color channel shift
+    // 8. color channel shift
     if (params.color_shift > 0.1f) {
         effects->color_channel_shift(frame_data, width, height, params.color_shift * energy);
     }
 
-    // 8. color remap - wild swaps on beats
+    // 9. color remap - wild swaps on beats
     if (on_beat && params.color_shift > 0.3f) {
         int mode = (int)(time * 0.5f) % 5;
         effects->color_remap(frame_data, width, height, mode);
     }
 
-    // 9. pulse zoom on beats
+    // 10. GHOST ACCUMULATION - noclip effect
+    // stamp current frame blocks into persistent ghost buffer, more on beats
+    // then composite ghost onto output so old stamps keep showing
+    if (params.motion_blur > 0.05f || params.beat_sync > 0.1f) {
+        int num_stamps = 2 + (int)(energy * 8);  // 2-10 blocks per frame
+        if (on_beat) num_stamps += 6;             // burst on beats
+        effects->ghost_stamp(frame_data, width, height, ghost_buf, num_stamps, current_frame);
+        // strength ramps up over time so ghosts become more visible as they accumulate
+        float ghost_str = params.motion_blur * (0.4f + 0.3f * energy);
+        effects->ghost_composite(frame_data, width, height, ghost_buf, ghost_str);
+    }
+
+    // 11. pulse zoom on beats
     if (on_beat && params.beat_sync > 0.5f) {
         effects->pulse_effect(frame_data, width, height, beat_strength);
     }
 
-    // 10. wave distortion - continuous, energy modulated
+    // 12. wave distortion - continuous, energy modulated
     if (params.motion_blur > 0.2f) {
         float phase = time * 3.14f + energy * 2.0f;
         effects->wave_distortion(frame_data, width, height, phase);
     }
 
-    // 11. scanlines on quiet parts
+    // 13. scanlines on quiet parts
     if (energy < 0.35f) {
         effects->scanlines(frame_data, width, height, 30);
     }
 
-    // 12. pixelate on extreme beats
+    // 14. pixelate on extreme beats
     if (on_beat && energy > 0.8f && params.block_shuffle > 0.6f) {
         effects->pixelate(frame_data, width, height, 8);
     }
