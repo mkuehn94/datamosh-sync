@@ -293,7 +293,23 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     enc_ctx->framerate = AVRational{OUTPUT_FPS, 1};
     enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     enc_ctx->bit_rate = OUTPUT_BITRATE;
-    
+
+    // DATAMOSH ENCODER SETTINGS - this is where the real look comes from
+    // keyframes basically never = P-frames reference frames from ages ago
+    // = errors and smears accumulate instead of getting reset every 2 seconds
+    enc_ctx->gop_size = 100000;   // one keyframe at the start, then never again
+    enc_ctx->max_b_frames = 0;    // P-frames only, the classic mosh chain
+
+    // kill scene cut detection or x264 sneaks keyframes in anyway
+    // (priv_data only exists for libx264, so check first)
+    if (enc_ctx->priv_data) {
+        av_opt_set(enc_ctx->priv_data, "sc_threshold", "0", 0);
+        av_opt_set(enc_ctx->priv_data, "keyint_min", "100000", 0);
+        // fewer refs = prediction drifts harder. 2 seems like the sweet spot,
+        // 1 made everything turn to mush too fast
+        av_opt_set(enc_ctx->priv_data, "refs", "2", 0);
+    }
+
     if (output_ctx->oformat->flags & AVFMT_GLOBALHEADER) {
         enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
