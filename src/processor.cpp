@@ -31,12 +31,16 @@ VideoMosher::VideoMosher() {
     prev_rgb_size = 0;
     ghost_buf = nullptr;
     ghost_buf_size = 0;
+    held_frame = nullptr;
+    held_frame_size = 0;
+    last_energy = 0.0f;
 }
 
 VideoMosher::~VideoMosher() {
     finish_encoding();
     if (prev_rgb) free(prev_rgb);
     if (ghost_buf) free(ghost_buf);
+    if (held_frame) free(held_frame);
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -97,7 +101,7 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     return true;
 }
 
-void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
+bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
     bool on_beat = false;
     float beat_strength = 0.0;
 
@@ -110,6 +114,7 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     }
 
     float energy = audio->get_current_energy(time);
+    last_energy = energy;  // process_video needs this for the freeze-hold
 
     int frame_size = width * height * 3;
     if (!prev_rgb || prev_rgb_size != frame_size) {
@@ -212,6 +217,8 @@ void VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     }
 
     free(prev_for_trails);
+
+    return on_beat;
 }
 
 
@@ -243,9 +250,34 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
         uint8_t* frame_data = video->get_frame_rgb();  // get RGB not YUV
 
         if (frame_data && width > 0 && height > 0) {
-            process_frame(frame_data, width, height, time);
+            bool beat = process_frame(frame_data, width, height, time);
             encode_frame(frame_data);  // encode processed frame
             frame_count++;
+            current_frame++;
+
+            // keep a copy of what we just encoded for the freeze-hold
+            int fsz = width * height * 3;
+            if (!held_frame || held_frame_size != fsz) {
+                if (held_frame) free(held_frame);
+                held_frame = (uint8_t*)malloc(fsz);
+                held_frame_size = fsz;
+            }
+            memcpy(held_frame, frame_data, fsz);
+
+            // FREEZE-HOLD MOSH: on hard beats just keep encoding the SAME
+            // image while the video runs on underneath. with the giant GOP
+            // the encoder emits tiny do-nothing P-frames, and when we snap
+            // back to live video everything smears like crazy. frame count
+            // stays the same so the music still syncs.
+            if (beat && params.beat_sync > 0.3f && last_energy > 0.6f) {
+                int hold = 1 + (int)(last_energy * 5.0f * params.beat_sync);
+                for (int h = 0; h < hold; h++) {
+                    if (!video->read_frame()) break;  // consume real frames, toss em
+                    encode_frame(held_frame);
+                    frame_count++;
+                    time += dt;
+                }
+            }
 
             if (frame_count % 30 == 0) {
                 cout << "processed " << frame_count << " frames" << endl;

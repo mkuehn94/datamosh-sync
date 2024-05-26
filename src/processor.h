@@ -26,7 +26,8 @@ public:
     bool process_video(const std::string& output_path, ProcessParams params);
 
 private:
-    void process_frame(uint8_t* frame_data, int width, int height, float time);
+    // returns true if this frame landed on a beat
+    bool process_frame(uint8_t* frame_data, int width, int height, float time);
     bool setup_encoder(const std::string& output_path, int width, int height);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
@@ -43,6 +44,9 @@ private:
     int prev_rgb_size;
     uint8_t* ghost_buf;   // persistent ghost layer - never cleared, only stamped into
     int ghost_buf_size;
+    uint8_t* held_frame;  // copy of last encoded frame, for the freeze-hold mosh
+    int held_frame_size;
+    float last_energy;    // audio energy at current frame, saved for the hold logic
 
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;
