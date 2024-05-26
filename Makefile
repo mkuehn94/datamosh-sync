@@ -32,7 +32,10 @@ $(OBJDIR)/gui_main.o: $(SRCDIR)/gui_main.cpp
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+# NOTE: depend on ALL headers because make was happily linking stale
+# object files against the new class layout and the whole thing
+# segfaulted in avformat_open_input of all places
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/*.h
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
