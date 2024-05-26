@@ -34,6 +34,13 @@ VideoMosher::VideoMosher() {
     held_frame = nullptr;
     held_frame_size = 0;
     last_energy = 0.0f;
+
+    track_x = track_y = track_w = track_h = 0;
+    track_persistence = 0;
+    track_dx = track_dy = 0.0f;
+    for (int i = 0; i < HISTORY_LEN; i++) history[i] = nullptr;
+    hist_pos = 0;
+    have_prev = false;
 }
 
 VideoMosher::~VideoMosher() {
@@ -41,6 +48,9 @@ VideoMosher::~VideoMosher() {
     if (prev_rgb) free(prev_rgb);
     if (ghost_buf) free(ghost_buf);
     if (held_frame) free(held_frame);
+    for (int i = 0; i < HISTORY_LEN; i++) {
+        if (history[i]) free(history[i]);
+    }
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -129,9 +139,15 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         ghost_buf_size = frame_size;
         memset(ghost_buf, 0, frame_size);  // start black
     }
+    // figure out whats moving BEFORE we overwrite prev_rgb
+    if (have_prev) {
+        motion_track(frame_data, width, height);
+    }
+
     uint8_t* prev_for_trails = (uint8_t*)malloc(frame_size);
     memcpy(prev_for_trails, prev_rgb, frame_size);
     memcpy(prev_rgb, frame_data, frame_size);
+    have_prev = true;
 
     // 1. motion vector glitch - scales with energy
     float mv_intensity = params.glitch_intensity * (0.3f + 0.7f * energy);
@@ -218,7 +234,134 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
 
     free(prev_for_trails);
 
+    // ===== PERSISTENT OBJECT FX =====
+    // if something keeps moving in the same area for a while (car driving
+    // through the shot, person walking around) it must be the subject -
+    // so it gets the special treatment. the longer it persists the harder
+    // it gets hit. THIS is what makes it look trippy instead of just broken
+    if (track_persistence > PERSIST_FRAMES && params.glitch_intensity > 0.2f) {
+        float p = (track_persistence - PERSIST_FRAMES) / 60.0f;
+        if (p > 1.0f) p = 1.0f;
+
+        // echo twin: pull the same region from ~half a second ago and stamp
+        // it where the object USED to be. history holds processed frames so
+        // old echoes echo again. feedback yum
+        int lag_idx = (hist_pos + HISTORY_LEN - ECHO_LAG_FRAMES) % HISTORY_LEN;
+        if (history[lag_idx]) {
+            effects->echo_region(frame_data, width, height, history[lag_idx],
+                                 track_x, track_y, track_w, track_h,
+                                 (int)(-track_dx * 10), (int)(-track_dy * 10),
+                                 0.3f + 0.4f * p);
+        }
+
+        // smear it along its own direction of travel
+        if (fabs(track_dx) + fabs(track_dy) > 1.0f) {
+            effects->vector_smear(frame_data, width, height,
+                                  track_x, track_y, track_w, track_h,
+                                  track_dx * (2.0f + energy * 4.0f),
+                                  track_dy * (2.0f + energy * 4.0f),
+                                  0.25f + 0.35f * p);
+        }
+
+        // stamp it into the ghost layer so it never really leaves the frame
+        effects->ghost_stamp_region(frame_data, width, height, ghost_buf,
+                                    track_x, track_y, track_w, track_h,
+                                    track_dx, track_dy, 1 + (int)(p * 3));
+    }
+
+    // stash this frame in history for future echoes
+    // TODO: this eats RAM like crazy on big videos, whatever
+    if (!history[hist_pos]) {
+        history[hist_pos] = (uint8_t*)malloc(frame_size);
+    }
+    memcpy(history[hist_pos], frame_data, frame_size);
+    hist_pos = (hist_pos + 1) % HISTORY_LEN;
+
     return on_beat;
+}
+
+void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
+    // super cheap motion estimation: 16px blocks, SAD on rough luma,
+    // search +-8 px. not accurate at all but we dont need accuracy,
+    // we need "something has been moving HERE for a while"
+
+    int block = MACROBLOCK_SIZE;
+    int gx = width / block;
+    int gy = height / block;
+
+    int moving = 0;
+    int minx = width, miny = height, maxx = 0, maxy = 0;
+    float sum_dx = 0, sum_dy = 0;
+
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int cx = bx * block;
+            int cy = by * block;
+
+            // find best match for this block in the previous frame
+            int best_sad = 0x7fffffff;
+            int best_dx = 0, best_dy = 0;
+
+            for (int sy = -8; sy <= 8; sy += 4) {
+                for (int sx = -8; sx <= 8; sx += 4) {
+                    int px = cx + sx;
+                    int py = cy + sy;
+                    if (px < 0 || py < 0 || px + block > width || py + block > height)
+                        continue;
+
+                    int sad = 0;
+                    for (int y = 0; y < block; y += 4) {
+                        for (int x = 0; x < block; x += 4) {
+                            int ci = ((cy + y) * width + cx + x) * 3;
+                            int pi = ((py + y) * width + px + x) * 3;
+                            int cl = frame_data[ci] + frame_data[ci+1] + frame_data[ci+2];
+                            int pl = prev_rgb[pi] + prev_rgb[pi+1] + prev_rgb[pi+2];
+                            sad += abs(cl - pl);
+                        }
+                    }
+
+                    if (sad < best_sad) {
+                        best_sad = sad;
+                        best_dx = sx;
+                        best_dy = sy;
+                    }
+                }
+            }
+
+            // "moving" = block found a better match somewhere else, but the
+            // match is still decent (huge sad = scene cut / noise, skip)
+            int mv = abs(best_dx) + abs(best_dy);
+            if (mv >= 4 && best_sad < 30000) {
+                moving++;
+                sum_dx += best_dx;
+                sum_dy += best_dy;
+                if (cx < minx) minx = cx;
+                if (cy < miny) miny = cy;
+                if (cx + block > maxx) maxx = cx + block;
+                if (cy + block > maxy) maxy = cy + block;
+            }
+        }
+    }
+
+    if (moving > 3) {
+        // smooth the bbox so it doesnt jitter all over the place
+        float s = 0.3f;
+        if (track_persistence == 0) s = 1.0f;  // snap on first detection
+        track_x = (int)(track_x * (1 - s) + minx * s);
+        track_y = (int)(track_y * (1 - s) + miny * s);
+        track_w = (int)(track_w * (1 - s) + (maxx - minx) * s);
+        track_h = (int)(track_h * (1 - s) + (maxy - miny) * s);
+        track_dx = track_dx * (1 - s) + (sum_dx / moving) * s;
+        track_dy = track_dy * (1 - s) + (sum_dy / moving) * s;
+
+        track_persistence++;
+        if (track_persistence > 600) track_persistence = 600;  // cap it
+    } else {
+        // nothing moving. decays instead of resetting, feels better when
+        // motion pauses for a couple frames (car at a red light etc)
+        track_persistence -= 2;
+        if (track_persistence < 0) track_persistence = 0;
+    }
 }
 
 

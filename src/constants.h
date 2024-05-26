@@ -34,4 +34,9 @@
 // causes tearing when it gets too high
 //#define SHIFT_AMOUNT 14
 
+// persistent object tracking
+#define HISTORY_LEN 24        // ring buffer of processed frames (~0.8s at 30fps)
+#define PERSIST_FRAMES 20     // frames something has to keep moving before we call it an object
+#define ECHO_LAG_FRAMES 15    // how far back in time the echo twin comes from
+
 #endif

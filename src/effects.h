@@ -44,6 +44,23 @@ public:
     void ghost_composite(uint8_t* data, int width, int height,
                          uint8_t* ghost, float strength);
 
+    // persistent object effects - for when the tracker found something
+    // that's been moving in the same area for a while
+    // echo_region: copy the region from an OLD frame back in, object gets a twin
+    // vector_smear: drag the region along its own motion, leading edge stretches
+    // ghost_stamp_region: stamp the region into the ghost layer along its path
+    void echo_region(uint8_t* data, int width, int height,
+                     uint8_t* old_frame,
+                     int rx, int ry, int rw, int rh,
+                     int off_x, int off_y, float amount);
+    void vector_smear(uint8_t* data, int width, int height,
+                      int rx, int ry, int rw, int rh,
+                      float dx, float dy, float amount);
+    void ghost_stamp_region(uint8_t* data, int width, int height,
+                            uint8_t* ghost,
+                            int rx, int ry, int rw, int rh,
+                            float dx, float dy, int num);
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;

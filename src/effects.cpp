@@ -447,3 +447,136 @@ void EffectEngine::ghost_composite(uint8_t* data, int width, int height,
         data[i] = (uint8_t)v;
     }
 }
+
+// ========= ECHO REGION (time delay twin) =========
+// copies a rectangle from an OLD frame into the current one, offset a bit.
+// if the old frame came from the processed history you get feedback -
+// echoes of echoes of echoes. object drags its own past behind it
+void EffectEngine::echo_region(uint8_t* data, int width, int height,
+                               uint8_t* old_frame,
+                               int rx, int ry, int rw, int rh,
+                               int off_x, int off_y, float amount) {
+    if (!old_frame || rw <= 0 || rh <= 0) return;
+    if (amount > 1.0f) amount = 1.0f;
+
+    for (int y = 0; y < rh; y++) {
+        int src_y = ry + y;
+        int dst_y = ry + y + off_y;
+        if (src_y < 0 || src_y >= height) continue;
+        if (dst_y < 0 || dst_y >= height) continue;
+
+        for (int x = 0; x < rw; x++) {
+            int src_x = rx + x;
+            int dst_x = rx + x + off_x;
+            if (src_x < 0 || src_x >= width) continue;
+            if (dst_x < 0 || dst_x >= width) continue;
+
+            int si = (src_y * width + src_x) * 3;
+            int di = (dst_y * width + dst_x) * 3;
+
+            // blend, not overwrite - hard edges look pasted on
+            data[di+0] = (uint8_t)(data[di+0] * (1.0f - amount) + old_frame[si+0] * amount);
+            data[di+1] = (uint8_t)(data[di+1] * (1.0f - amount) + old_frame[si+1] * amount);
+            data[di+2] = (uint8_t)(data[di+2] * (1.0f - amount) + old_frame[si+2] * amount);
+        }
+    }
+}
+
+// ========= VECTOR SMEAR =========
+// drags a region's pixels along a direction. pixels closer to the leading
+// edge get dragged harder, so the object stretches out along its own path.
+// looks like the codec's motion prediction gave up on this thing specifically
+void EffectEngine::vector_smear(uint8_t* data, int width, int height,
+                                int rx, int ry, int rw, int rh,
+                                float dx, float dy, float amount) {
+    if (rw <= 0 || rh <= 0 || amount <= 0.01f) return;
+    if (amount > 1.0f) amount = 1.0f;
+
+    // clamp region to frame
+    if (rx < 0) { rw += rx; rx = 0; }
+    if (ry < 0) { rh += ry; ry = 0; }
+    if (rx + rw > width)  rw = width  - rx;
+    if (ry + rh > height) rh = height - ry;
+    if (rw <= 0 || rh <= 0) return;
+
+    uint8_t* tmp = (uint8_t*)malloc(rw * rh * 3);
+    for (int y = 0; y < rh; y++) {
+        memcpy(&tmp[y * rw * 3], &data[((ry + y) * width + rx) * 3], rw * 3);
+    }
+
+    float mag = sqrtf(dx * dx + dy * dy);
+
+    for (int y = 0; y < rh; y++) {
+        for (int x = 0; x < rw; x++) {
+            // how far along the motion this pixel sits (0 = trailing, 1 = leading)
+            float along = 0.5f;
+            if (mag > 0.01f) {
+                along = ((x - rw / 2) * dx / mag + (y - rh / 2) * dy / mag)
+                        / (float)(rw + rh) + 0.5f;
+                if (along < 0.0f) along = 0.0f;
+                if (along > 1.0f) along = 1.0f;
+            }
+
+            int sx = x - (int)(dx * (0.5f + along));
+            int sy = y - (int)(dy * (0.5f + along));
+            if (sx < 0) sx = 0;
+            if (sx >= rw) sx = rw - 1;
+            if (sy < 0) sy = 0;
+            if (sy >= rh) sy = rh - 1;
+
+            int si = (sy * rw + sx) * 3;
+            int di = ((ry + y) * width + rx + x) * 3;
+
+            float a = amount * (0.4f + 0.6f * along);
+            data[di+0] = (uint8_t)(data[di+0] * (1.0f - a) + tmp[si+0] * a);
+            data[di+1] = (uint8_t)(data[di+1] * (1.0f - a) + tmp[si+1] * a);
+            data[di+2] = (uint8_t)(data[di+2] * (1.0f - a) + tmp[si+2] * a);
+        }
+    }
+
+    free(tmp);
+}
+
+// ========= GHOST STAMP REGION =========
+// stamps one specific region into the ghost layer at a few spots trailing
+// back along its motion path. ghost layer never clears so a persistent
+// object leaves permanent copies of itself behind. a car driving through
+// the frame basically paints itself onto the road forever
+void EffectEngine::ghost_stamp_region(uint8_t* data, int width, int height,
+                                      uint8_t* ghost,
+                                      int rx, int ry, int rw, int rh,
+                                      float dx, float dy, int num) {
+    if (!ghost || rw <= 0 || rh <= 0) return;
+
+    int block = MACROBLOCK_SIZE;
+
+    for (int s = 0; s < num; s++) {
+        // each stamp lands further back along the path
+        int ox = rx - (int)(dx * (s + 1) * 4);
+        int oy = ry - (int)(dy * (s + 1) * 4);
+
+        // stamp block by block so it degrades like macroblock copies
+        for (int y = 0; y < rh; y += block) {
+            for (int x = 0; x < rw; x += block) {
+                for (int py = 0; py < block && y + py < rh; py++) {
+                    int src_y = ry + y + py;
+                    int dst_y = oy + y + py;
+                    if (src_y < 0 || src_y >= height) continue;
+                    if (dst_y < 0 || dst_y >= height) continue;
+
+                    int src_x = rx + x;
+                    int dst_x = ox + x;
+                    int len = block;
+                    if (src_x < 0 || dst_x < 0) continue;
+                    if (src_x + len > width) len = width - src_x;
+                    if (dst_x + len > width) len = width - dst_x;
+                    if (len <= 0) continue;
+
+                    int si = (src_y * width + src_x) * 3;
+                    int di = (dst_y * width + dst_x) * 3;
+                    memcpy(&ghost[di], &data[si], len * 3);
+                }
+            }
+        }
+    }
+}

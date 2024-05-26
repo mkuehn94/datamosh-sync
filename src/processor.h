@@ -4,6 +4,7 @@
 #include "video_processor.h"
 #include "audio_analyzer.h"
 #include "effects.h"
+#include "constants.h"
 #include <string>
 #include <vector>
 
@@ -31,6 +32,10 @@ private:
     bool setup_encoder(const std::string& output_path, int width, int height);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
+
+    // dumb block-matching motion tracker. finds whatever keeps moving in
+    // the same area (a car, a person) so we can mess with it specifically
+    void motion_track(uint8_t* frame_data, int width, int height);
     // bool copy_audio_stream();  // REMOVED - was causing issues
 
     VideoProcessor* video;
@@ -47,6 +52,14 @@ private:
     uint8_t* held_frame;  // copy of last encoded frame, for the freeze-hold mosh
     int held_frame_size;
     float last_energy;    // audio energy at current frame, saved for the hold logic
+
+    // object tracking state
+    int track_x, track_y, track_w, track_h;  // smoothed bbox of "the object"
+    int track_persistence;                    // frames it's been alive
+    float track_dx, track_dy;                 // smoothed motion direction
+    uint8_t* history[HISTORY_LEN];            // ring buffer of processed frames
+    int hist_pos;
+    bool have_prev;                           // prev_rgb valid yet?
 
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;
