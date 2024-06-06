@@ -61,6 +61,16 @@ public:
                             int rx, int ry, int rw, int rh,
                             float dx, float dy, int num);
 
+    // world merge - shadows of the new scene open up into the old one.
+    // feed it the last frame of the previous scene + a fade factor
+    void world_merge(uint8_t* data, int width, int height,
+                     uint8_t* old_world, float fade);
+
+    // mask composite - ghost layer shows up as SOLID objects sitting in
+    // the frame, not bright haze. this is what makes stacks look stacked
+    void mask_composite(uint8_t* data, int width, int height,
+                        uint8_t* ghost, float strength);
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;

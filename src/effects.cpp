@@ -580,3 +580,46 @@ void EffectEngine::ghost_stamp_region(uint8_t* data, int width, int height,
         }
     }
 }
+
+// ========= WORLD MERGE =========
+// two scenes occupying the same frame. dark parts of the new world become
+// windows into the old one - shadows, night sky, dark clothing all bleed
+// through into a place that isnt there anymore
+void EffectEngine::world_merge(uint8_t* data, int width, int height,
+                               uint8_t* old_world, float fade) {
+    if (!old_world || fade <= 0.01f) return;
+
+    int size = width * height;
+    for (int i = 0; i < size; i++) {
+        int idx = i * 3;
+        // rough luma of the NEW world
+        int luma = (data[idx] * 2 + data[idx+1] * 3 + data[idx+2]) / 6;
+        // darker new pixel = more old world shows through
+        float a = fade * (1.0f - luma / 255.0f);
+        if (a > 0.9f) a = 0.9f;  // never fully replace or it just looks like a cut
+
+        data[idx+0] = (uint8_t)(data[idx+0] * (1.0f - a) + old_world[idx+0] * a);
+        data[idx+1] = (uint8_t)(data[idx+1] * (1.0f - a) + old_world[idx+1] * a);
+        data[idx+2] = (uint8_t)(data[idx+2] * (1.0f - a) + old_world[idx+2] * a);
+    }
+}
+
+// ========= MASK COMPOSITE =========
+// ghost layer as solid objects instead of additive haze. wherever something
+// got stamped, it sits in the frame like its actually there. stamped objects
+// pile up behind moving things and just... stay. static stacks
+void EffectEngine::mask_composite(uint8_t* data, int width, int height,
+                                  uint8_t* ghost, float strength) {
+    if (!ghost || strength <= 0.01f) return;
+    if (strength > 1.0f) strength = 1.0f;
+
+    int size = width * height * 3;
+    for (int i = 0; i < size; i += 3) {
+        int g = ghost[i] + ghost[i+1] + ghost[i+2];
+        if (g > 24) {  // not black = something was stamped here
+            data[i+0] = (uint8_t)(data[i+0] * (1.0f - strength) + ghost[i+0] * strength);
+            data[i+1] = (uint8_t)(data[i+1] * (1.0f - strength) + ghost[i+1] * strength);
+            data[i+2] = (uint8_t)(data[i+2] * (1.0f - strength) + ghost[i+2] * strength);
+        }
+    }
+}
