@@ -41,6 +41,11 @@ VideoMosher::VideoMosher() {
     for (int i = 0; i < HISTORY_LEN; i++) history[i] = nullptr;
     hist_pos = 0;
     have_prev = false;
+
+    world_buf = nullptr;
+    world_buf_size = 0;
+    world_fade = 0.0f;
+    scene_cut = false;
 }
 
 VideoMosher::~VideoMosher() {
@@ -51,6 +56,7 @@ VideoMosher::~VideoMosher() {
     for (int i = 0; i < HISTORY_LEN; i++) {
         if (history[i]) free(history[i]);
     }
+    if (world_buf) free(world_buf);
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -149,87 +155,61 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     memcpy(prev_rgb, frame_data, frame_size);
     have_prev = true;
 
-    // 1. motion vector glitch - scales with energy
-    float mv_intensity = params.glitch_intensity * (0.3f + 0.7f * energy);
-    effects->motion_vector_glitch(frame_data, width, height, mv_intensity);
+    // ============================================================
+    // KILLED the old pipeline (motion_vector_glitch, datamosh_streak,
+    // jpeg_corruption, color_encode_corrupt, color_remap, scanlines,
+    // pixelate, wave everywhere). it looked like movie maker confetti.
+    // real mosh is smear + merge + stack + lag. nothing else.
+    // functions still exist in effects.cpp if i ever want them back
+    // ============================================================
 
-    // 2. glitch bands - horizontal streaks on high energy
-    if (energy > 0.5f) {
-        effects->glitch_bands(frame_data, width, height, params.glitch_intensity * energy);
+    // 1. SCENE CUT -> worlds merge
+    // motion_track flagged a cut: save the last frame of the old world
+    // and let it bleed into the new one for the next few seconds
+    if (scene_cut) {
+        if (!world_buf || world_buf_size != frame_size) {
+            if (world_buf) free(world_buf);
+            world_buf = (uint8_t*)malloc(frame_size);
+            world_buf_size = frame_size;
+        }
+        memcpy(world_buf, prev_for_trails, frame_size);  // old world's final frame
+        world_fade = 1.0f;
+        track_persistence = 0;  // new world, new subject
+        scene_cut = false;
     }
 
-    // 3. datamosh streaks on beats - real P-frame style
-    if (on_beat) {
-        int seed = (int)(time * 1000) + current_frame;
-        effects->datamosh_streak(frame_data, width, height, seed, 2 + (int)(energy * 4));
-    }
-
-    // 4. jpeg corruption on beats
-    if (on_beat && params.jpeg_quality < 90) {
-        effects->jpeg_corruption(frame_data, width, height, params.jpeg_quality);
-    }
-
-    // 5. color encoding corruption - block level color mangle that the codec amplifies
-    // tied to color_shift + energy, runs always but more on beats/high energy
-    float corrupt_amt = params.color_shift * (0.2f + 0.8f * energy);
-    if (on_beat) corrupt_amt = min(1.0f, corrupt_amt + 0.3f);
-    if (corrupt_amt > 0.1f) {
-        effects->color_encode_corrupt(frame_data, width, height, corrupt_amt);
-    }
-
-    // 6. motion trails
+    // 2. trails - temporal smear, the base layer of the whole look
     if (params.motion_blur > 0.1f) {
         float trail_amt = params.motion_blur * (0.3f + 0.5f * energy);
         effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
     }
 
-    // 7. block shuffle on beats
-    if (on_beat && params.block_shuffle > 0.2f) {
-        effects->block_shuffle(frame_data, width, height, params.block_shuffle);
+    // 3. world merge - shadows of the new scene open into the old one.
+    // decays over ~4 seconds. during a freeze-hold the encoder smears
+    // the merge even further which is exactly what we want
+    if (world_fade > 0.01f) {
+        effects->world_merge(frame_data, width, height, world_buf, world_fade * 0.8f);
+        world_fade *= 0.985f;
     }
 
-    // 8. color channel shift
-    if (params.color_shift > 0.1f) {
-        effects->color_channel_shift(frame_data, width, height, params.color_shift * energy);
+    // 4. glitch bands - only on real energy peaks, the ONE corruption
+    // effect that survived the purge because it looks like actual
+    // bitstream damage and not a snapchat filter
+    if (energy > 0.65f) {
+        effects->glitch_bands(frame_data, width, height,
+                              params.glitch_intensity * energy * 0.5f);
     }
 
-    // 9. color remap - wild swaps on beats
-    if (on_beat && params.color_shift > 0.3f) {
-        int mode = (int)(time * 0.5f) % 5;
-        effects->color_remap(frame_data, width, height, mode);
-    }
-
-    // 10. GHOST ACCUMULATION - noclip effect
-    // stamp current frame blocks into persistent ghost buffer, more on beats
-    // then composite ghost onto output so old stamps keep showing
-    if (params.motion_blur > 0.05f || params.beat_sync > 0.1f) {
-        int num_stamps = 2 + (int)(energy * 8);  // 2-10 blocks per frame
-        if (on_beat) num_stamps += 6;             // burst on beats
-        effects->ghost_stamp(frame_data, width, height, ghost_buf, num_stamps, current_frame);
-        // strength ramps up over time so ghosts become more visible as they accumulate
-        float ghost_str = params.motion_blur * (0.4f + 0.3f * energy);
-        effects->ghost_composite(frame_data, width, height, ghost_buf, ghost_str);
-    }
-
-    // 11. pulse zoom on beats
+    // 5. pulse zoom on beats
     if (on_beat && params.beat_sync > 0.5f) {
         effects->pulse_effect(frame_data, width, height, beat_strength);
     }
 
-    // 12. wave distortion - continuous, energy modulated
-    if (params.motion_blur > 0.2f) {
-        float phase = time * 3.14f + energy * 2.0f;
-        effects->wave_distortion(frame_data, width, height, phase);
-    }
-
-    // 13. scanlines on quiet parts
-    if (energy < 0.35f) {
-        effects->scanlines(frame_data, width, height, 30);
-    }
-
-    // 14. pixelate on extreme beats
-    if (on_beat && energy > 0.8f && params.block_shuffle > 0.6f) {
-        effects->pixelate(frame_data, width, height, 8);
+    // 6. ghost layer composite - SOLID stacks, not haze. whatever got
+    // stamped (objects, mostly) sits in the frame like its really there
+    if (params.motion_blur > 0.05f || params.beat_sync > 0.1f) {
+        float ghost_str = 0.35f + params.motion_blur * 0.3f;
+        effects->mask_composite(frame_data, width, height, ghost_buf, ghost_str);
     }
 
     free(prev_for_trails);
@@ -243,15 +223,14 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         float p = (track_persistence - PERSIST_FRAMES) / 60.0f;
         if (p > 1.0f) p = 1.0f;
 
-        // echo twin: pull the same region from ~half a second ago and stamp
-        // it where the object USED to be. history holds processed frames so
-        // old echoes echo again. feedback yum
+        // TIME LAG: the region shows what was there ~half a second ago.
+        // the object visibly lags behind itself, like its timeline slipped.
+        // history holds processed frames so the lag compounds
         int lag_idx = (hist_pos + HISTORY_LEN - ECHO_LAG_FRAMES) % HISTORY_LEN;
         if (history[lag_idx]) {
             effects->echo_region(frame_data, width, height, history[lag_idx],
                                  track_x, track_y, track_w, track_h,
-                                 (int)(-track_dx * 10), (int)(-track_dy * 10),
-                                 0.3f + 0.4f * p);
+                                 0, 0, 0.45f + 0.35f * p);
         }
 
         // smear it along its own direction of travel
@@ -263,10 +242,13 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                                   0.25f + 0.35f * p);
         }
 
-        // stamp it into the ghost layer so it never really leaves the frame
+        // STATIC STACKING: stamp the object into the ghost layer at its
+        // EXACT current position every frame. as it moves, solid copies
+        // of it pile up behind it and just stay there. a car crossing
+        // the frame leaves a traffic jam of itself
         effects->ghost_stamp_region(frame_data, width, height, ghost_buf,
                                     track_x, track_y, track_w, track_h,
-                                    track_dx, track_dy, 1 + (int)(p * 3));
+                                    0, 0, 1);
     }
 
     // stash this frame in history for future echoes
@@ -290,6 +272,7 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
     int gy = height / block;
 
     int moving = 0;
+    int nomatch = 0;  // blocks that found NO good match anywhere
     int minx = width, miny = height, maxx = 0, maxy = 0;
     float sum_dx = 0, sum_dy = 0;
 
@@ -331,6 +314,7 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
             // "moving" = block found a better match somewhere else, but the
             // match is still decent (huge sad = scene cut / noise, skip)
             int mv = abs(best_dx) + abs(best_dy);
+            if (best_sad > 50000) nomatch++;  // block matches nothing = new content
             if (mv >= 4 && best_sad < 30000) {
                 moving++;
                 sum_dx += best_dx;
@@ -341,6 +325,12 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
                 if (cy + block > maxy) maxy = cy + block;
             }
         }
+    }
+
+    // scene cut = most of the frame matches NOTHING in the previous one.
+    // process_frame turns this into a world merge
+    if (nomatch > (gx * gy) / 3) {
+        scene_cut = true;
     }
 
     if (moving > 3) {

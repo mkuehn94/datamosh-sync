@@ -61,6 +61,12 @@ private:
     int hist_pos;
     bool have_prev;                           // prev_rgb valid yet?
 
+    // world merging - last frame of the previous scene, bleeds into the new one
+    uint8_t* world_buf;
+    int world_buf_size;
+    float world_fade;                         // 1.0 right after a cut, decays slowly
+    bool scene_cut;                           // motion_track sets this
+
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;
     AVStream* out_stream;
