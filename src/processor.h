@@ -67,6 +67,16 @@ private:
     float world_fade;                         // 1.0 right after a cut, decays slowly
     bool scene_cut;                           // motion_track sets this
 
+    // stuck overlay state - frozen patch that refuses to update
+    uint8_t* stuck_buf;
+    int stuck_x, stuck_y, stuck_w, stuck_h;
+    int stuck_timer;                          // frames left frozen, 0 = not stuck
+
+    // void state - the color being keyed out (smoothed, else it flickers)
+    float void_r, void_g, void_b;
+    bool void_color_init;
+    int void_off_x, void_off_y;               // where the void looks into
+
     AVFormatContext* output_ctx;
     AVCodecContext* enc_ctx;
     AVStream* out_stream;

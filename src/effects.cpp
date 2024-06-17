@@ -604,6 +604,72 @@ void EffectEngine::world_merge(uint8_t* data, int width, int height,
     }
 }
 
+// ========= STUCK OVERLAY =========
+// you know the one - stream shits itself and one chunk of the picture
+// just stops. people walk behind it, cars drive behind it, it does not
+// care. it stays until the decoder remembers what reality was
+void EffectEngine::grab_rect(uint8_t* data, int width, int height,
+                             uint8_t* out, int rx, int ry, int rw, int rh) {
+    for (int y = 0; y < rh; y++) {
+        if (ry + y >= height) break;
+        memcpy(&out[y * rw * 3], &data[((ry + y) * width + rx) * 3], rw * 3);
+    }
+}
+
+void EffectEngine::paste_rect(uint8_t* data, int width, int height,
+                              uint8_t* patch, int rx, int ry, int rw, int rh) {
+    // full overwrite, no blending. its STUCK, not translucent
+    for (int y = 0; y < rh; y++) {
+        if (ry + y >= height) break;
+        memcpy(&data[((ry + y) * width + rx) * 3], &patch[y * rw * 3], rw * 3);
+    }
+}
+
+// ========= VOID =========
+// match a color, delete it, and let something else show through the hole -
+// specifically another part of the same frame, displaced. the sky becomes
+// a window into the road. the road becomes a window into a building
+void EffectEngine::void_replace(uint8_t* data, int width, int height,
+                                int tr, int tg, int tb, int tolerance,
+                                int off_x, int off_y, float amount) {
+    if (amount <= 0.01f) return;
+
+    int tol2 = tolerance * tolerance;
+
+    // iterate AGAINST the displacement so we always read pixels that
+    // havent been voided yet. learned this one the hard way, forward
+    // iteration turns the whole void into one flat smear
+    int y0 = (off_y >= 0) ? height - 1 : 0;
+    int y1 = (off_y >= 0) ? -1 : height;
+    int ys = (off_y >= 0) ? -1 : 1;
+    int x0 = (off_x >= 0) ? width - 1 : 0;
+    int x1 = (off_x >= 0) ? -1 : width;
+    int xs = (off_x >= 0) ? -1 : 1;
+
+    for (int y = y0; y != y1; y += ys) {
+        int sy = y + off_y;
+        if (sy < 0 || sy >= height) continue;
+
+        for (int x = x0; x != x1; x += xs) {
+            int sx = x + off_x;
+            if (sx < 0 || sx >= width) continue;
+
+            int idx = (y * width + x) * 3;
+            int dr = data[idx+0] - tr;
+            int dg = data[idx+1] - tg;
+            int db = data[idx+2] - tb;
+
+            // squared distance, no sqrt needed
+            if (dr*dr + dg*dg + db*db < tol2) {
+                int src = (sy * width + sx) * 3;
+                data[idx+0] = (uint8_t)(data[idx+0] * (1.0f - amount) + data[src+0] * amount);
+                data[idx+1] = (uint8_t)(data[idx+1] * (1.0f - amount) + data[src+1] * amount);
+                data[idx+2] = (uint8_t)(data[idx+2] * (1.0f - amount) + data[src+2] * amount);
+            }
+        }
+    }
+}
+
 // ========= MASK COMPOSITE =========
 // ghost layer as solid objects instead of additive haze. wherever something
 // got stamped, it sits in the frame like its actually there. stamped objects

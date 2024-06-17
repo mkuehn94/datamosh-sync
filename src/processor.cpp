@@ -46,6 +46,14 @@ VideoMosher::VideoMosher() {
     world_buf_size = 0;
     world_fade = 0.0f;
     scene_cut = false;
+
+    stuck_buf = nullptr;
+    stuck_x = stuck_y = stuck_w = stuck_h = 0;
+    stuck_timer = 0;
+    void_r = void_g = void_b = 0.0f;
+    void_color_init = false;
+    void_off_x = 0;
+    void_off_y = 0;
 }
 
 VideoMosher::~VideoMosher() {
@@ -57,6 +65,7 @@ VideoMosher::~VideoMosher() {
         if (history[i]) free(history[i]);
     }
     if (world_buf) free(world_buf);
+    if (stuck_buf) free(stuck_buf);
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
@@ -192,6 +201,45 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         world_fade *= 0.985f;
     }
 
+    // 3.5 THE VOID - auto-key on the sky color, matched pixels become a
+    // window into a displaced chunk of the same frame. the displacement
+    // jumps on beats because of course it does
+    if (params.color_shift > 0.1f && energy > 0.35f) {
+        // learn the void color from the top strip (usually sky)
+        long sr = 0, sg = 0, sb = 0, n = 0;
+        for (int y = 0; y < height / 8; y += 4) {
+            for (int x = 0; x < width; x += 4) {
+                int idx = (y * width + x) * 3;
+                sr += frame_data[idx];
+                sg += frame_data[idx+1];
+                sb += frame_data[idx+2];
+                n++;
+            }
+        }
+        if (n > 0) {
+            if (!void_color_init) {
+                void_r = sr / n; void_g = sg / n; void_b = sb / n;
+                void_color_init = true;
+            } else {
+                // heavy smoothing or the void edge flickers like a
+                // broken greenscreen. learned that one the hard way
+                void_r = void_r * 0.98f + (sr / n) * 0.02f;
+                void_g = void_g * 0.98f + (sg / n) * 0.02f;
+                void_b = void_b * 0.98f + (sb / n) * 0.02f;
+            }
+        }
+        if (on_beat) {
+            // new place for the void to look into, block aligned
+            void_off_x = ((rand() % 2) * 2 - 1) * width / 4;
+            void_off_x = (void_off_x / MACROBLOCK_SIZE) * MACROBLOCK_SIZE;
+            void_off_y = ((rand() % 5) - 2) * MACROBLOCK_SIZE;
+        }
+        effects->void_replace(frame_data, width, height,
+                              (int)void_r, (int)void_g, (int)void_b, 42,
+                              void_off_x, void_off_y,
+                              0.5f + 0.4f * energy);
+    }
+
     // 4. glitch bands - only on real energy peaks, the ONE corruption
     // effect that survived the purge because it looks like actual
     // bitstream damage and not a snapchat filter
@@ -258,6 +306,34 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     }
     memcpy(history[hist_pos], frame_data, frame_size);
     hist_pos = (hist_pos + 1) % HISTORY_LEN;
+
+    // STUCK OVERLAY - paste LAST so it stays frozen no matter what the
+    // other effects do behind it. history above stores the UNstuck frame
+    // so lag/echo dont get confused by the patch
+    if (stuck_timer > 0) {
+        effects->paste_rect(frame_data, width, height, stuck_buf,
+                            stuck_x, stuck_y, stuck_w, stuck_h);
+        stuck_timer--;
+    } else if (on_beat && energy > 0.7f && (rand() % 100) < 30 &&
+               params.glitch_intensity > 0.3f) {
+        // grab a chunk and freeze it for 1-4 seconds. block aligned so
+        // the encoder treats it as truly static = cheapest P-frames ever
+        stuck_w = MACROBLOCK_SIZE * (6 + rand() % 14);
+        stuck_h = MACROBLOCK_SIZE * (4 + rand() % 10);
+        if (stuck_w > width)  stuck_w = width;
+        if (stuck_h > height) stuck_h = height;
+        int range_x = width - stuck_w;
+        int range_y = height - stuck_h;
+        if (range_x < 1) range_x = 1;
+        if (range_y < 1) range_y = 1;
+        stuck_x = (rand() % range_x) / MACROBLOCK_SIZE * MACROBLOCK_SIZE;
+        stuck_y = (rand() % range_y) / MACROBLOCK_SIZE * MACROBLOCK_SIZE;
+        if (stuck_buf) free(stuck_buf);
+        stuck_buf = (uint8_t*)malloc(stuck_w * stuck_h * 3);
+        effects->grab_rect(frame_data, width, height, stuck_buf,
+                           stuck_x, stuck_y, stuck_w, stuck_h);
+        stuck_timer = 30 + rand() % 90;
+    }
 
     return on_beat;
 }

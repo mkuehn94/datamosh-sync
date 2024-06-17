@@ -71,6 +71,20 @@ public:
     void mask_composite(uint8_t* data, int width, int height,
                         uint8_t* ghost, float strength);
 
+    // stuck overlay - the classic broken-stream artifact. grab a rect,
+    // freeze it, paste it over the live video while everything behind
+    // it keeps moving. grab once, paste every frame, then release
+    void grab_rect(uint8_t* data, int width, int height,
+                   uint8_t* out, int rx, int ry, int rw, int rh);
+    void paste_rect(uint8_t* data, int width, int height,
+                    uint8_t* patch, int rx, int ry, int rw, int rh);
+
+    // VOID - every pixel matching a color gets replaced by a chunk of
+    // the same frame from somewhere else. holes into the wrong reality
+    void void_replace(uint8_t* data, int width, int height,
+                      int tr, int tg, int tb, int tolerance,
+                      int off_x, int off_y, float amount);
+
 private:
     uint8_t* temp_buffer;
     int buffer_size;
