@@ -1,0 +1,27 @@
+# build artifacts
+obj/
+*.o
+datamosh-sync
+datamosh-gui
+
+# generated video
+*.mp4
+*.avi
+*.mov
+*.gif
+out/
+test_output/
+
+# python
+__pycache__/
+*.pyc
+
+# editor / os
+*.swp
+*.swo
+*~
+.DS_Store
+*.py[cod]
+.pytest_cache/
+/test_basic
+/test_effect
