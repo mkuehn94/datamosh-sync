@@ -150,11 +150,11 @@ int main(int argc, char** argv) {
     gtk_box_pack_start(GTK_BOX(vbox), sliders_box, FALSE, FALSE, 0);
 
     slider_glitch  = make_slider(sliders_box, "Glitch Intensity",  0.0, 1.0, 0.5,  0.01);
-    slider_jpeg    = make_slider(sliders_box, "JPEG Quality (low = more corruption)",
+    slider_jpeg    = make_slider(sliders_box, "Void Tolerance (low = huge voids)",
                                  1.0, 100.0, 65.0, 1.0);
-    slider_mblur   = make_slider(sliders_box, "Motion Blur / Trails", 0.0, 1.0, 0.3, 0.01);
-    slider_color   = make_slider(sliders_box, "Color Shift",        0.0, 1.0, 0.2,  0.01);
-    slider_shuffle = make_slider(sliders_box, "Block Shuffle",      0.0, 1.0, 0.3,  0.01);
+    slider_mblur   = make_slider(sliders_box, "Motion Blur / Trails / Stacks", 0.0, 1.0, 0.3, 0.01);
+    slider_color   = make_slider(sliders_box, "Void Depth",        0.0, 1.0, 0.2,  0.01);
+    slider_shuffle = make_slider(sliders_box, "Stuck Overlay Duration",      0.0, 1.0, 0.3,  0.01);
     slider_beatsync = make_slider(sliders_box, "Beat Sync",         0.0, 1.0, 0.7,  0.01);
 
     // --- separator ---
@@ -162,6 +162,8 @@ int main(int argc, char** argv) {
 
     // TODO: preset buttons would be nice here
     // maybe: Subtle / Normal / Extreme / Chaos
+    // NOTE: sliders actually do something now at ALL positions.
+    // (effects used to have hard thresholds so mid settings = clean video)
 
     // --- process button ---
     btn_process = gtk_button_new_with_label("MOSH IT");

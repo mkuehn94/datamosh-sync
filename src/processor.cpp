@@ -187,9 +187,11 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         scene_cut = false;
     }
 
-    // 2. trails - temporal smear, the base layer of the whole look
-    if (params.motion_blur > 0.1f) {
-        float trail_amt = params.motion_blur * (0.3f + 0.5f * energy);
+    // 2. trails - temporal smear, the base layer of the whole look.
+    // slider scales it DIRECTLY now. used to be gated at >0.1 which
+    // meant mid-low settings did literally nothing (the "gui bug")
+    if (params.motion_blur > 0.02f) {
+        float trail_amt = params.motion_blur * (0.25f + 0.55f * energy);
         effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
     }
 
@@ -204,7 +206,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // 3.5 THE VOID - auto-key on the sky color, matched pixels become a
     // window into a displaced chunk of the same frame. the displacement
     // jumps on beats because of course it does
-    if (params.color_shift > 0.1f && energy > 0.35f) {
+    if (params.color_shift > 0.02f && energy > 0.25f) {
         // learn the void color from the top strip (usually sky)
         long sr = 0, sg = 0, sb = 0, n = 0;
         for (int y = 0; y < height / 8; y += 4) {
@@ -234,29 +236,34 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
             void_off_x = (void_off_x / MACROBLOCK_SIZE) * MACROBLOCK_SIZE;
             void_off_y = ((rand() % 5) - 2) * MACROBLOCK_SIZE;
         }
+        // tolerance comes from the old jpeg slider (repurposed, that
+        // effect is dead). low slider value = huge void, high = surgical
+        int tol = 10 + (int)((100.0f - params.jpeg_quality) * 0.5f);
+        // color slider = how deep the void cuts
+        float void_amt = params.color_shift * (0.35f + 0.55f * energy);
         effects->void_replace(frame_data, width, height,
-                              (int)void_r, (int)void_g, (int)void_b, 42,
-                              void_off_x, void_off_y,
-                              0.5f + 0.4f * energy);
+                              (int)void_r, (int)void_g, (int)void_b, tol,
+                              void_off_x, void_off_y, void_amt);
     }
 
     // 4. glitch bands - only on real energy peaks, the ONE corruption
     // effect that survived the purge because it looks like actual
     // bitstream damage and not a snapchat filter
-    if (energy > 0.65f) {
+    if (energy > 0.5f && params.glitch_intensity > 0.05f) {
         effects->glitch_bands(frame_data, width, height,
-                              params.glitch_intensity * energy * 0.5f);
+                              params.glitch_intensity * energy * 0.6f);
     }
 
-    // 5. pulse zoom on beats
-    if (on_beat && params.beat_sync > 0.5f) {
-        effects->pulse_effect(frame_data, width, height, beat_strength);
+    // 5. pulse zoom on beats - beatsync slider scales the punch
+    if (on_beat && params.beat_sync > 0.05f) {
+        effects->pulse_effect(frame_data, width, height,
+                              beat_strength * params.beat_sync);
     }
 
     // 6. ghost layer composite - SOLID stacks, not haze. whatever got
     // stamped (objects, mostly) sits in the frame like its really there
-    if (params.motion_blur > 0.05f || params.beat_sync > 0.1f) {
-        float ghost_str = 0.35f + params.motion_blur * 0.3f;
+    if (params.motion_blur > 0.02f) {
+        float ghost_str = 0.2f + params.motion_blur * 0.45f;
         effects->mask_composite(frame_data, width, height, ghost_buf, ghost_str);
     }
 
@@ -267,9 +274,11 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // through the shot, person walking around) it must be the subject -
     // so it gets the special treatment. the longer it persists the harder
     // it gets hit. THIS is what makes it look trippy instead of just broken
-    if (track_persistence > PERSIST_FRAMES && params.glitch_intensity > 0.2f) {
+    if (track_persistence > PERSIST_FRAMES && params.glitch_intensity > 0.05f) {
         float p = (track_persistence - PERSIST_FRAMES) / 60.0f;
         if (p > 1.0f) p = 1.0f;
+        // glitch slider scales how hard the subject gets hit
+        float g = 0.3f + 0.7f * params.glitch_intensity;
 
         // TIME LAG: the region shows what was there ~half a second ago.
         // the object visibly lags behind itself, like its timeline slipped.
@@ -278,7 +287,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         if (history[lag_idx]) {
             effects->echo_region(frame_data, width, height, history[lag_idx],
                                  track_x, track_y, track_w, track_h,
-                                 0, 0, 0.45f + 0.35f * p);
+                                 0, 0, (0.45f + 0.35f * p) * g);
         }
 
         // smear it along its own direction of travel
@@ -287,7 +296,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                                   track_x, track_y, track_w, track_h,
                                   track_dx * (2.0f + energy * 4.0f),
                                   track_dy * (2.0f + energy * 4.0f),
-                                  0.25f + 0.35f * p);
+                                  (0.25f + 0.35f * p) * g);
         }
 
         // STATIC STACKING: stamp the object into the ghost layer at its
@@ -314,8 +323,9 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         effects->paste_rect(frame_data, width, height, stuck_buf,
                             stuck_x, stuck_y, stuck_w, stuck_h);
         stuck_timer--;
-    } else if (on_beat && energy > 0.7f && (rand() % 100) < 30 &&
-               params.glitch_intensity > 0.3f) {
+    } else if (on_beat && energy > 0.55f &&
+               (rand() % 100) < (int)(params.glitch_intensity * 35) &&
+               params.glitch_intensity > 0.05f) {
         // grab a chunk and freeze it for 1-4 seconds. block aligned so
         // the encoder treats it as truly static = cheapest P-frames ever
         stuck_w = MACROBLOCK_SIZE * (6 + rand() % 14);
@@ -332,7 +342,8 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         stuck_buf = (uint8_t*)malloc(stuck_w * stuck_h * 3);
         effects->grab_rect(frame_data, width, height, stuck_buf,
                            stuck_x, stuck_y, stuck_w, stuck_h);
-        stuck_timer = 30 + rand() % 90;
+        // old shuffle slider (repurposed) = how long it stays stuck
+        stuck_timer = 20 + (int)(params.block_shuffle * 120) + rand() % 60;
     }
 
     return on_beat;
@@ -478,7 +489,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
             // the encoder emits tiny do-nothing P-frames, and when we snap
             // back to live video everything smears like crazy. frame count
             // stays the same so the music still syncs.
-            if (beat && params.beat_sync > 0.3f && last_energy > 0.6f) {
+            if (beat && params.beat_sync > 0.1f && last_energy > 0.55f) {
                 int hold = 1 + (int)(last_energy * 5.0f * params.beat_sync);
                 for (int h = 0; h < hold; h++) {
                     if (!video->read_frame()) break;  // consume real frames, toss em
