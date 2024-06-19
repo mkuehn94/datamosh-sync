@@ -1,8 +1,8 @@
 # datamosh-sync makefile
 
 CC = g++
-CFLAGS = -Wall -Wextra -g -std=c++11
-LDFLAGS = -lavformat -lavcodec -lavutil -lswscale -lm
+CFLAGS = -Wall -Wextra -g -O2 -fopenmp -std=c++11
+LDFLAGS = -lavformat -lavcodec -lavutil -lswscale -lm -fopenmp
 
 GTK_CFLAGS  = $(shell pkg-config --cflags gtk+-3.0 2>/dev/null)
 GTK_LDFLAGS = $(shell pkg-config --libs   gtk+-3.0 2>/dev/null)
