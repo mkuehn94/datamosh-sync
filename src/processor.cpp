@@ -34,6 +34,7 @@ VideoMosher::VideoMosher() {
     held_frame = nullptr;
     held_frame_size = 0;
     last_energy = 0.0f;
+    fps = OUTPUT_FPS;
 
     track_x = track_y = track_w = track_h = 0;
     track_persistence = 0;
@@ -455,15 +456,20 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
 
     int width = video->get_width();
     int height = video->get_height();
+    AVRational src_fps = video->get_fps();
+    fps = av_q2d(src_fps);
+    cout << "source fps: " << fps << endl;
 
     // setup output encoder
-    if (!setup_encoder(output_path, width, height)) {
+    if (!setup_encoder(output_path, width, height, src_fps)) {
         cerr << "Failed to setup encoder" << endl;
         return false;
     }
 
     float time = 0.0;
-    float dt = 1.0 / OUTPUT_FPS;
+    // was hardcoded 1/30. on a 60fps source that made every beat land at
+    // half the real time
+    float dt = 1.0 / fps;
     int frame_count = 0;
 
     while (video->read_frame()) {
@@ -515,7 +521,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     return true;
 }
 
-bool VideoMosher::setup_encoder(const string& output_path, int width, int height) {
+bool VideoMosher::setup_encoder(const string& output_path, int width, int height, AVRational rate) {
     // create output context
     avformat_alloc_output_context2(&output_ctx, nullptr, nullptr, output_path.c_str());
     if (!output_ctx) {
@@ -541,8 +547,8 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     enc_ctx = avcodec_alloc_context3(codec);
     enc_ctx->width = width;
     enc_ctx->height = height;
-    enc_ctx->time_base = AVRational{1, OUTPUT_FPS};
-    enc_ctx->framerate = AVRational{OUTPUT_FPS, 1};
+    enc_ctx->time_base = rate;
+    enc_ctx->framerate = rate;
     enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     enc_ctx->bit_rate = OUTPUT_BITRATE;
 
@@ -605,7 +611,7 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     
     next_pts = 0;
 
-    cout << "encoder setup complete: " << width << "x" << height << " @ " << OUTPUT_FPS << " fps" << endl;
+    cout << "encoder setup complete: " << width << "x" << height << " @ " << fps << " fps" << endl;
 
     // try to copy audio stream
     // TODO: this is kinda hacky but works

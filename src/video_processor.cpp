@@ -1,4 +1,5 @@
 #include "video_processor.h"
+#include "constants.h"
 #include <iostream>
 
 using namespace std;
@@ -96,6 +97,15 @@ bool VideoProcessor::read_frame() {
         }
     }
     return false;
+}
+
+AVRational VideoProcessor::get_fps() {
+    AVRational r = av_guess_frame_rate(fmt_ctx, fmt_ctx->streams[video_stream_idx], nullptr);
+    if (r.num <= 0 || r.den <= 0) {
+        r.num = OUTPUT_FPS;  // no idea, fall back to the old default
+        r.den = 1;
+    }
+    return r;
 }
 
 uint8_t* VideoProcessor::get_frame_data() {

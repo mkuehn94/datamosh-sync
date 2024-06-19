@@ -29,7 +29,7 @@ public:
 private:
     // returns true if this frame landed on a beat
     bool process_frame(uint8_t* frame_data, int width, int height, float time);
-    bool setup_encoder(const std::string& output_path, int width, int height);
+    bool setup_encoder(const std::string& output_path, int width, int height, AVRational rate);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
 
@@ -45,6 +45,7 @@ private:
     ProcessParams params;
     std::vector<float> beat_times;
     int current_frame;
+    float fps;            // of the source, NOT always 30
     uint8_t* prev_rgb;    // for trails effect
     int prev_rgb_size;
     uint8_t* ghost_buf;   // persistent ghost layer - never cleared, only stamped into

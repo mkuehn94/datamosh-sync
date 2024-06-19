@@ -23,6 +23,7 @@ public:
     uint8_t* get_frame_rgb();  // convert to RGB format
     int get_width() { return width; }
     int get_height() { return height; }
+    AVRational get_fps();  // real framerate of the source
 
 private:
     AVFormatContext* fmt_ctx;
