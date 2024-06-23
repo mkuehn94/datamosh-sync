@@ -547,7 +547,7 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     enc_ctx = avcodec_alloc_context3(codec);
     enc_ctx->width = width;
     enc_ctx->height = height;
-    enc_ctx->time_base = rate;
+    enc_ctx->time_base = av_inv_q(rate);
     enc_ctx->framerate = rate;
     enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     enc_ctx->bit_rate = OUTPUT_BITRATE;
