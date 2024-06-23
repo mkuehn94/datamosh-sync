@@ -5,6 +5,7 @@
 #include "audio_analyzer.h"
 #include "effects.h"
 #include "constants.h"
+#include "warp.h"
 #include <string>
 #include <vector>
 
@@ -15,6 +16,10 @@ struct ProcessParams {
     float color_shift;
     float block_shuffle;
     float beat_sync;
+    float rot;       // decoder that lost its keyframes
+    float warp;      // hijacked motion vectors, gravity wells
+    float quake;     // blocks living in different moments
+    float spectral;  // frequencies living in different moments
 };
 
 class VideoMosher {
@@ -41,6 +46,8 @@ private:
     VideoProcessor* video;
     AudioAnalyzer* audio;
     EffectEngine* effects;
+    WarpEngine* warp;
+    bool last_on_beat;
 
     ProcessParams params;
     std::vector<float> beat_times;

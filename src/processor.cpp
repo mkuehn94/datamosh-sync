@@ -20,6 +20,8 @@ VideoMosher::VideoMosher() {
     video = nullptr;
     audio = nullptr;
     effects = nullptr;
+    warp = nullptr;
+    last_on_beat = false;
     current_frame = 0;
     output_ctx = nullptr;
     enc_ctx = nullptr;
@@ -70,6 +72,7 @@ VideoMosher::~VideoMosher() {
     if (video) delete video;
     if (audio) delete audio;
     if (effects) delete effects;
+    if (warp) delete warp;
 }
 
 bool VideoMosher::init(const string& video_path, const string& audio_path) {
@@ -78,6 +81,7 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
+    warp = new WarpEngine();
 
     if (!video->open(video_path)) {
         cerr << "failed to open video" << endl;
@@ -104,6 +108,7 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
+    warp = new WarpEngine();
 
     cout << "[debug] opening video..." << endl;
     if (!video->open(video_path)) {
@@ -159,6 +164,17 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     if (have_prev) {
         motion_track(frame_data, width, height);
     }
+    // real vectors for the rot, also needs the clean frame
+    warp->estimate_motion(frame_data);
+    if (warp->scene_cut()) scene_cut = true;
+
+    AudioFrame af;
+    af.energy = energy;
+    af.bass = audio->get_bass(time);
+    af.treble = audio->get_treble(time);
+    af.kick = on_beat && !last_on_beat;  // on_beat stays true for a few frames
+    af.cut = warp->scene_cut();
+    last_on_beat = on_beat;
 
     uint8_t* prev_for_trails = (uint8_t*)malloc(frame_size);
     memcpy(prev_for_trails, prev_rgb, frame_size);
@@ -309,6 +325,10 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                                     0, 0, 1);
     }
 
+    // ===== THE ROT =====
+    // everything above becomes the "source video" for the fake decoder
+    warp->rot_and_warp(frame_data, params.rot, params.warp, af);
+
     // stash this frame in history for future echoes
     // TODO: this eats RAM like crazy on big videos, whatever
     if (!history[hist_pos]) {
@@ -453,12 +473,16 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     cout << "color shift: " << params.color_shift << endl;
     cout << "block shuffle: " << params.block_shuffle << endl;
     cout << "beat sync: " << params.beat_sync << endl;
+    cout << "rot: " << params.rot << "  warp: " << params.warp
+         << "  quake: " << params.quake << "  spectral: " << params.spectral << endl;
 
     int width = video->get_width();
     int height = video->get_height();
     AVRational src_fps = video->get_fps();
     fps = av_q2d(src_fps);
     cout << "source fps: " << fps << endl;
+
+    warp->init(width, height, fps);
 
     // setup output encoder
     if (!setup_encoder(output_path, width, height, src_fps)) {

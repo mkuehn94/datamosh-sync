@@ -96,7 +96,11 @@ int main(int argc, char** argv) {
         0.3f,   // motion_blur
         0.2f,   // color_shift
         0.3f,   // block_shuffle
-        0.7f    // beat_sync
+        0.7f,   // beat_sync
+        0.6f,   // rot
+        0.4f,   // warp
+        0.4f,   // quake
+        0.3f    // spectral
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
@@ -109,6 +113,13 @@ int main(int argc, char** argv) {
         params.block_shuffle    = atof(argv[7]);
         params.beat_sync        = atof(argv[8]);
         cout << "using custom params from args" << endl;
+    }
+    // <rot> <warp> <quake> <spectral> go after those
+    if (argc >= 13) {
+        params.rot      = atof(argv[9]);
+        params.warp     = atof(argv[10]);
+        params.quake    = atof(argv[11]);
+        params.spectral = atof(argv[12]);
     }
 
     cout << "processing..." << endl;
