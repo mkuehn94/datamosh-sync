@@ -27,17 +27,28 @@ GtkWidget* slider_color;
 GtkWidget* slider_shuffle;
 GtkWidget* slider_beatsync;
 
+GtkWidget* slider_rot;
+GtkWidget* slider_warp;
+GtkWidget* slider_quake;
+GtkWidget* slider_spectral;
+
 GtkWidget* btn_process;
 
 static void run_processing(const char* input, float glitch, float jpeg,
-                            float mblur, float color, float shuffle, float beatsync) {
+                            float mblur, float color, float shuffle, float beatsync,
+                            float rot, float warp, float quake, float spectral) {
     char s_glitch[16], s_jpeg[16], s_mblur[16], s_color[16], s_shuffle[16], s_beatsync[16];
+    char s_rot[16], s_warp[16], s_quake[16], s_spectral[16];
     snprintf(s_glitch,   sizeof(s_glitch),   "%.3f", glitch);
     snprintf(s_jpeg,     sizeof(s_jpeg),     "%.1f", jpeg);
     snprintf(s_mblur,    sizeof(s_mblur),    "%.3f", mblur);
     snprintf(s_color,    sizeof(s_color),    "%.3f", color);
     snprintf(s_shuffle,  sizeof(s_shuffle),  "%.3f", shuffle);
     snprintf(s_beatsync, sizeof(s_beatsync), "%.3f", beatsync);
+    snprintf(s_rot,      sizeof(s_rot),      "%.3f", rot);
+    snprintf(s_warp,     sizeof(s_warp),     "%.3f", warp);
+    snprintf(s_quake,    sizeof(s_quake),    "%.3f", quake);
+    snprintf(s_spectral, sizeof(s_spectral), "%.3f", spectral);
 
     pid_t pid = fork();
     if (pid == 0) {
@@ -45,6 +56,7 @@ static void run_processing(const char* input, float glitch, float jpeg,
                input,
                "",         // no separate audio
                s_glitch, s_jpeg, s_mblur, s_color, s_shuffle, s_beatsync,
+               s_rot, s_warp, s_quake, s_spectral,
                (char*)nullptr);
         exit(1);
     }
@@ -65,6 +77,10 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
     float color   = gtk_range_get_value(GTK_RANGE(slider_color));
     float shuffle = gtk_range_get_value(GTK_RANGE(slider_shuffle));
     float beatsync = gtk_range_get_value(GTK_RANGE(slider_beatsync));
+    float rot      = gtk_range_get_value(GTK_RANGE(slider_rot));
+    float warp     = gtk_range_get_value(GTK_RANGE(slider_warp));
+    float quake    = gtk_range_get_value(GTK_RANGE(slider_quake));
+    float spectral = gtk_range_get_value(GTK_RANGE(slider_spectral));
 
     gtk_label_set_text(GTK_LABEL(label_status), "processing... (check terminal)");
     gtk_widget_set_sensitive(btn_process, FALSE);
@@ -73,7 +89,8 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
     // for now just blocks lol
     while (gtk_events_pending()) gtk_main_iteration();
 
-    run_processing(input, glitch, jpeg, mblur, color, shuffle, beatsync);
+    run_processing(input, glitch, jpeg, mblur, color, shuffle, beatsync,
+                   rot, warp, spectral, quake);
 
     gtk_label_set_text(GTK_LABEL(label_status), "done! check for *_munched.mp4");
     gtk_widget_set_sensitive(btn_process, TRUE);
@@ -125,7 +142,7 @@ int main(int argc, char** argv) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "datamosh-sync 0.3");
-    gtk_window_set_default_size(GTK_WINDOW(window), 480, 540);
+    gtk_window_set_default_size(GTK_WINDOW(window), 480, 760);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
@@ -156,6 +173,13 @@ int main(int argc, char** argv) {
     slider_color   = make_slider(sliders_box, "Void Depth",        0.0, 1.0, 0.2,  0.01);
     slider_shuffle = make_slider(sliders_box, "Stuck Overlay Duration",      0.0, 1.0, 0.3,  0.01);
     slider_beatsync = make_slider(sliders_box, "Beat Sync",         0.0, 1.0, 0.7,  0.01);
+
+    gtk_box_pack_start(GTK_BOX(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
+
+    slider_rot      = make_slider(sliders_box, "ROT (decoder lost its keyframes)",   0.0, 1.0, 0.6, 0.01);
+    slider_warp     = make_slider(sliders_box, "WARP (tunnel + gravity wells)",      0.0, 1.0, 0.4, 0.01);
+    slider_quake    = make_slider(sliders_box, "TIME QUAKE (uses a lot of ram)",     0.0, 1.0, 0.4, 0.01);
+    slider_spectral = make_slider(sliders_box, "SPECTRAL LAG (two moments at once)", 0.0, 1.0, 0.3, 0.01);
 
     // --- separator ---
     gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
