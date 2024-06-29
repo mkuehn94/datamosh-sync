@@ -28,7 +28,8 @@ trying a C++ version with proper GUI and real-time control. way faster.
 
 src/ contains the new implementation:
 - video_processor: ffmpeg wrapper for reading video
-- audio_analyzer: beat detection (placeholder for now) + audio extraction
+- audio_analyzer: real beat detection now (spectral flux), bass/treble curves
+- warp: fake decoder. rot, warp, time quake, spectral lag
 - effects: all the datamosh effects
 - gui: gtk3 interface with parameter sliders
 - stream_corrupter: experimental h264 NAL manipulation
@@ -39,7 +40,28 @@ build with `make`, run with:
 ./datamosh-sync video.mp4 audio.mp3    # separate audio file
 ```
 
-effects implemented:
+the good stuff (src/warp.cpp), all 0-1, all follow the music:
+
+- ROT: decoder that lost its keyframes. real vectors + real residuals applied
+  to a canvas that never gets refreshed. brightness heals before color so
+  the street gets sharp again in the colors of the last place
+- WARP: same thing but the vectors get hijacked. bass kicks a tunnel, kicks
+  rip gravity wells into the picture
+- TIME QUAKE: every macroblock reads from a different moment, kicks send a
+  shockwave through time. RAM: width*height*3*fps*2 bytes (560MB for 1440x1080 at 60fps)
+- SPECTRAL LAG: real 8x8 dct, frequencies held at different times. edges
+  from now, brightness from seconds ago. flips every 8 kicks
+
+```
+./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral>
+
+# defaults
+./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.6 0.4 0.4 0.3
+# only the new stuff, melt everything
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1
+```
+
+old effects list:
 - motion vector glitching
 - jpeg corruption
 - block shuffling
@@ -48,7 +70,6 @@ effects implemented:
 - wave distortion
 
 still need to:
-- get real beat detection working
 - implement actual I-frame removal
 - add video preview to GUI
 - optimize the slow effects
