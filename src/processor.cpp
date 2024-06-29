@@ -181,6 +181,14 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     memcpy(prev_rgb, frame_data, frame_size);
     have_prev = true;
 
+    // ===== THE ROT =====
+    // has to come first and has to see the clean video. had it at the end
+    // of the chain first but then the residuals of all the other effects
+    // (zoom pulse especially) pile up in the canvas and in about 5 seconds
+    // the whole picture is tv static
+    warp->rot_and_warp(frame_data, params.rot, params.warp, af);
+    bool rotting = params.rot > 0.01f || params.warp > 0.01f;
+
     // ============================================================
     // KILLED the old pipeline (motion_vector_glitch, datamosh_streak,
     // jpeg_corruption, color_encode_corrupt, color_remap, scanlines,
@@ -207,7 +215,9 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // 2. trails - temporal smear, the base layer of the whole look.
     // slider scales it DIRECTLY now. used to be gated at >0.1 which
     // meant mid-low settings did literally nothing (the "gui bug")
-    if (params.motion_blur > 0.02f) {
+    // not while rotting, blending the clean frame back in is just haze and
+    // the rot smears way better anyway
+    if (params.motion_blur > 0.02f && !rotting) {
         float trail_amt = params.motion_blur * (0.25f + 0.55f * energy);
         effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
     }
@@ -247,7 +257,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                 void_b = void_b * 0.98f + (sb / n) * 0.02f;
             }
         }
-        if (on_beat) {
+        if (af.kick) {
             // new place for the void to look into, block aligned
             void_off_x = ((rand() % 2) * 2 - 1) * width / 4;
             void_off_x = (void_off_x / MACROBLOCK_SIZE) * MACROBLOCK_SIZE;
@@ -291,7 +301,11 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // through the shot, person walking around) it must be the subject -
     // so it gets the special treatment. the longer it persists the harder
     // it gets hit. THIS is what makes it look trippy instead of just broken
-    if (track_persistence > PERSIST_FRAMES && params.glitch_intensity > 0.05f) {
+    // if the "object" is most of the frame its not an object, thats the camera
+    // moving. blending the entire picture with itself from half a second
+    // ago turned everything into grey fog
+    bool whole_frame = track_w * track_h > width * height / 2;
+    if (track_persistence > PERSIST_FRAMES && params.glitch_intensity > 0.05f && !whole_frame) {
         float p = (track_persistence - PERSIST_FRAMES) / 60.0f;
         if (p > 1.0f) p = 1.0f;
         // glitch slider scales how hard the subject gets hit
@@ -325,9 +339,8 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                                     0, 0, 1);
     }
 
-    // ===== THE ROT =====
-    // everything above becomes the "source video" for the fake decoder
-    warp->rot_and_warp(frame_data, params.rot, params.warp, af);
+    warp->spectral_lag(frame_data, params.spectral, af);
+    warp->time_quake(frame_data, params.quake, af);
 
     // stash this frame in history for future echoes
     // TODO: this eats RAM like crazy on big videos, whatever
@@ -367,7 +380,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         stuck_timer = 20 + (int)(params.block_shuffle * 120) + rand() % 60;
     }
 
-    return on_beat;
+    return af.kick;
 }
 
 void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
@@ -380,7 +393,6 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
     int gy = height / block;
 
     int moving = 0;
-    int nomatch = 0;  // blocks that found NO good match anywhere
     int minx = width, miny = height, maxx = 0, maxy = 0;
     float sum_dx = 0, sum_dy = 0;
 
@@ -422,7 +434,6 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
             // "moving" = block found a better match somewhere else, but the
             // match is still decent (huge sad = scene cut / noise, skip)
             int mv = abs(best_dx) + abs(best_dy);
-            if (best_sad > 50000) nomatch++;  // block matches nothing = new content
             if (mv >= 4 && best_sad < 30000) {
                 moving++;
                 sum_dx += best_dx;
@@ -433,12 +444,6 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
                 if (cy + block > maxy) maxy = cy + block;
             }
         }
-    }
-
-    // scene cut = most of the frame matches NOTHING in the previous one.
-    // process_frame turns this into a world merge
-    if (nomatch > (gx * gy) / 3) {
-        scene_cut = true;
     }
 
     if (moving > 3) {
@@ -520,7 +525,8 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
             // back to live video everything smears like crazy. frame count
             // stays the same so the music still syncs.
             if (beat && params.beat_sync > 0.1f && last_energy > 0.55f) {
-                int hold = 1 + (int)(last_energy * 5.0f * params.beat_sync);
+                // numbers were tuned at 30fps
+                int hold = (1 + (int)(last_energy * 5.0f * params.beat_sync)) * fps / 30.0f;
                 for (int h = 0; h < hold; h++) {
                     if (!video->read_frame()) break;  // consume real frames, toss em
                     encode_frame(held_frame);

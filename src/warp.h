@@ -84,6 +84,7 @@ private:
     bool coef_ready;
     bool spectral_flip;
     int spectral_kicks;
+    unsigned frame_no;
 };
 
 #endif

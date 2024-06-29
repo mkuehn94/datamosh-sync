@@ -39,6 +39,7 @@ WarpEngine::WarpEngine() {
     coef_ready = false;
     spectral_flip = false;
     spectral_kicks = 0;
+    frame_no = 0;
 }
 
 WarpEngine::~WarpEngine() {
@@ -323,11 +324,11 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
             int vy = my + wy;
 
             // what would an encoder do with this block
-            int mode = 0;  // 0 = inter, 1 = intra (clean), 2 = skip residual, 3 = luma only
+            int mode = 0;  // 0 = inter, 1 = intra (clean), 2 = no residual, 3 = luma only
             // dice are per CLUSTER not per block. single random blocks look
             // like confetti, encoders make decisions in chunks
             float d = dice[(by / 2) * gx + bx / 2] / 255.0f;
-            float d2 = dice[(by / 4) * gx + bx / 4 + 1] / 255.0f;
+            float d2 = dice[((by / 4) * gx + bx / 4 + 1) % (gx * gy)] / 255.0f;
 
             if (a.cut) {
                 // THE moment. real mosh = you delete the i-frame here, new
@@ -341,6 +342,11 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
                 mode = 1;
             } else if (d2 < luma_heal) {
                 mode = 3;
+            } else if (block_err[idx] < 5) {
+                // barely changed = P-skip, a real encoder wouldnt send a
+                // residual either. without this sensor noise and the source
+                // compression add up in the canvas into grain
+                mode = 2;
             }
 
             // keyframe wipe passing over this block?
@@ -416,6 +422,285 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
     memcpy(data, canvas, size);
 }
 
-// filled in next
-void WarpEngine::time_quake(uint8_t*, float, const AudioFrame&) {}
-void WarpEngine::spectral_lag(uint8_t*, float, const AudioFrame&) {}
+// ===== time quake =====
+// keep the last couple seconds of output around and let every macroblock
+// pick how far back it wants to read from. a kick sends a ring across the
+// picture, whatever it passes gets thrown into the past and then slowly
+// catches up again. fast moving stuff also sinks by itself so it shreds
+// into layers of its own past
+//
+// depth gets quantized so you get hard edged sheets of time and not a smooth
+// blur
+
+void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
+    if (amount < 0.01f) return;
+
+    int size = w * h * 3;
+    int cap = (int)(QUAKE_SECONDS * fps);
+
+    // lazy alloc. at 1440x1080 60fps this is about 560MB
+    if ((int)ring_frames.size() < cap) {
+        ring_frames.assign(cap, nullptr);
+        for (int i = 0; i < cap; i++) ring_frames[i] = (uint8_t*)malloc(size);
+        cout << "[warp] quake buffer: " << (cap * (long)size) / (1024 * 1024) << " MB" << endl;
+    }
+
+    memcpy(ring_frames[ring_pos], data, size);
+    int now = ring_pos;
+    ring_pos = (ring_pos + 1) % cap;
+    if (ring_count < cap) ring_count++;
+
+    if (a.kick) {
+        Ring rg;
+        rg.x = w * (0.15f + 0.7f * rnd());
+        rg.y = h * (0.15f + 0.7f * rnd());
+        rg.r = 0;
+        rg.speed = h * (1.2f + 1.6f * rnd());   // crosses the frame in under a sec
+        rg.strength = amount * (0.4f + 0.6f * a.bass);
+        rings.push_back(rg);
+        if (rings.size() > 6) rings.erase(rings.begin());
+    }
+    for (size_t i = 0; i < rings.size();) {
+        rings[i].r += rings[i].speed * dt;
+        if (rings[i].r > (w + h) * 1.2f) rings.erase(rings.begin() + i);
+        else i++;
+    }
+
+    float band = h * 0.13f;
+    float max_depth = QUAKE_SECONDS * 0.98f;
+    // the past catches up. more quake = time stays broken for longer
+    float catch_up = pow(0.5f, dt / (0.2f + 0.9f * amount));
+    float sink = amount * 0.5f * dt;
+    int levels = 3 + (int)(a.treble * 3);   // hats make the sheets finer
+
+    vector<float> ox(gx * gy, 0.0f), oy(gx * gy, 0.0f), depth2(gx * gy);
+
+    // motion magnitude averaged over a neighborhood. single block vectors
+    // are noisy as hell, using them directly gave speckle instead of sheets
+    #pragma omp parallel for schedule(dynamic, 4)
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int idx = by * gx + bx;
+            float cx = bx * BLOCK + BLOCK * 0.5f, cy = by * BLOCK + BLOCK * 0.5f;
+            float dp = depth[idx] * catch_up;
+
+            float mv_sum = 0;
+            int n = 0;
+            for (int j = max(0, by - 3); j <= min(gy - 1, by + 3); j += 2) {
+                for (int i = max(0, bx - 3); i <= min(gx - 1, bx + 3); i += 2) {
+                    mv_sum += abs(mvx[j * gx + i]) + abs(mvy[j * gx + i]);
+                    n++;
+                }
+            }
+            // 32 is a lot of motion per frame at 1080
+            dp += min(1.0f, mv_sum / n / (32.0f * scale)) * sink;
+
+            for (size_t i = 0; i < rings.size(); i++) {
+                float dx = cx - rings[i].x;
+                float dy = cy - rings[i].y;
+                float len = sqrt(dx*dx + dy*dy) + 1.0f;
+                float u = (len - rings[i].r) / band;
+                if (u > -1.0f && u < 1.0f) {
+                    float prof = min(1.0f, (1.0f - u * u) * 2.0f);
+                    float hit = rings[i].strength * prof * max_depth;
+                    if (hit > dp) dp = hit;
+                    // space bends where the ring is, like its refracting
+                    float bend = rings[i].strength * (1.0f - u * u) * 70.0f * scale * (u < 0 ? -1.0f : 1.0f);
+                    ox[idx] += dx / len * bend;
+                    oy[idx] += dy / len * bend;
+                }
+            }
+            depth2[idx] = dp > max_depth ? max_depth : dp;
+        }
+    }
+
+    // little blur so the sheets have shape
+    #pragma omp parallel for
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            float t = 0;
+            int n = 0;
+            for (int j = max(0, by - 1); j <= min(gy - 1, by + 1); j++) {
+                for (int i = max(0, bx - 1); i <= min(gx - 1, bx + 1); i++) {
+                    t += depth2[j * gx + i];
+                    n++;
+                }
+            }
+            depth[by * gx + bx] = t / n;
+        }
+    }
+
+    #pragma omp parallel for schedule(dynamic, 4)
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int idx = by * gx + bx;
+            int x0 = bx * BLOCK, y0 = by * BLOCK;
+
+            float q = floor(depth[idx] / max_depth * levels + 0.5f) / levels;
+            int back = (int)(q * max_depth * fps);
+            if (back >= ring_count) back = ring_count - 1;
+
+            const uint8_t* f = ring_frames[(now - back + cap * 2) % cap];
+
+            int sx0 = x0 + (int)ox[idx];
+            int sy0 = y0 + (int)oy[idx];
+            if (sx0 < 0) sx0 = 0; else if (sx0 > w - BLOCK) sx0 = w - BLOCK;
+            if (sy0 < 0) sy0 = 0; else if (sy0 > h - BLOCK) sy0 = h - BLOCK;
+
+            if (back == 0 && sx0 == x0 && sy0 == y0) continue;  // already right
+
+            for (int y = 0; y < BLOCK; y++) {
+                memcpy(data + ((y0 + y) * w + x0) * 3,
+                       f + ((sy0 + y) * w + sx0) * 3,
+                       BLOCK * 3);
+            }
+        }
+    }
+}
+
+// ===== spectral lag =====
+// real 8x8 dct like a jpeg/h264 block, one held value per coefficient.
+// every frequency band updates at a different rate so the outlines of a car
+// are from a second ago while its brightness is from right now. every few
+// kicks the order flips, then the big blurry shapes are the old ones and the
+// fine detail is live
+//
+// NOTE sample and hold, NOT a running average. the average just blurs the
+// whole video (looks like a dream sequence from a bad soap). held values stay
+// sharp and thats what makes it look like two moments stuck together
+
+static float dct_tab[8][8];
+static bool dct_ready = false;
+
+static void dct_setup() {
+    for (int u = 0; u < 8; u++) {
+        float c = u == 0 ? sqrt(0.125f) : 0.5f;
+        for (int x = 0; x < 8; x++) {
+            dct_tab[u][x] = c * cos((2 * x + 1) * u * M_PI / 16.0);
+        }
+    }
+    dct_ready = true;
+}
+
+static void dct8(const float* in, float* out) {
+    float t[64];
+    for (int y = 0; y < 8; y++) {
+        for (int u = 0; u < 8; u++) {
+            float s = 0;
+            for (int x = 0; x < 8; x++) s += dct_tab[u][x] * in[y * 8 + x];
+            t[y * 8 + u] = s;
+        }
+    }
+    for (int u = 0; u < 8; u++) {
+        for (int v = 0; v < 8; v++) {
+            float s = 0;
+            for (int y = 0; y < 8; y++) s += dct_tab[v][y] * t[y * 8 + u];
+            out[v * 8 + u] = s;
+        }
+    }
+}
+
+static void idct8(const float* in, float* out) {
+    float t[64];
+    for (int u = 0; u < 8; u++) {
+        for (int y = 0; y < 8; y++) {
+            float s = 0;
+            for (int v = 0; v < 8; v++) s += dct_tab[v][y] * in[v * 8 + u];
+            t[y * 8 + u] = s;
+        }
+    }
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            float s = 0;
+            for (int u = 0; u < 8; u++) s += dct_tab[u][x] * t[y * 8 + u];
+            out[y * 8 + x] = s;
+        }
+    }
+}
+
+void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) {
+    if (amount < 0.01f) return;
+    if (!dct_ready) dct_setup();
+
+    int bw = w / 8, bh = h / 8;
+    bool first = !coef_ready;
+    if (first) {
+        coef.assign(bw * bh * 64, 0.0f);
+        coef_ready = true;
+    }
+
+    if (a.kick) {
+        spectral_kicks++;
+        if (spectral_kicks % 8 == 0) spectral_flip = !spectral_flip;
+    }
+
+    // low bands stay live, high bands get held (or the other way round when
+    // flipped). more amount = more of the picture is old, both ways. flipped
+    // has to stay tiny, holding even a few low bands is basically a freeze
+    // frame with a checkerboard on it
+    int split = spectral_flip ? (int)(amount * 1.5f) : 4 - (int)(amount * 3.0f);
+
+    // chance per frame that a chunk grabs a new held image
+    float grab = min(1.0f, dt / (0.1f + amount * 1.6f));
+    if (a.kick) grab = 0.25f;  // kicks refresh a good part of it at once
+
+    float crush = amount * (0.3f + a.bass);
+    // old detail gets boosted, at 1:1 it just looked like scratches on a lens
+    float gain = 1.0f + amount * 1.5f;
+
+    frame_no++;
+    unsigned frame_seed = frame_no * 2654435761u;
+
+    #pragma omp parallel for schedule(dynamic, 8)
+    for (int by = 0; by < bh; by++) {
+        float px[64], c[64], res[64];
+        for (int bx = 0; bx < bw; bx++) {
+            float* m = &coef[(by * bw + bx) * 64];
+            int x0 = bx * 8, y0 = by * 8;
+
+            for (int y = 0; y < 8; y++) {
+                const uint8_t* p = data + ((y0 + y) * w + x0) * 3;
+                for (int x = 0; x < 8; x++) {
+                    px[y * 8 + x] = (p[x*3] + 2 * p[x*3+1] + p[x*3+2]) * 0.25f - 128.0f;
+                }
+            }
+            dct8(px, c);
+
+            // 6x6 chunks of 8x8 blocks grab together. per block or per
+            // coefficient was just noise, looked like pebbled glass. a
+            // chunk holds a readable piece of the old picture
+            unsigned r = (((unsigned)(by / 6) * 73856093u) ^ ((unsigned)(bx / 6) * 19349663u) ^ frame_seed) * 2654435761u;
+            bool grabbing = first || (r >> 16) / 65536.0f < grab;
+
+            for (int v = 0; v < 8; v++) {
+                for (int u = 0; u < 8; u++) {
+                    int i = v * 8 + u;
+                    int f = u + v;
+                    bool held = spectral_flip ? (f <= split) : (f > split);
+                    if (!held) {
+                        m[i] = c[i];
+                    } else if (grabbing) {
+                        // never quantize DC or the blocks flash
+                        float q = 1.0f + f * 3.0f * crush;
+                        m[i] = i == 0 ? c[i] : floor(c[i] / q + 0.5f) * q * gain;
+                    }
+                }
+            }
+
+            idct8(m, res);
+
+            // only luma goes through here, add the difference to all channels
+            // and the color stays live
+            for (int y = 0; y < 8; y++) {
+                uint8_t* p = data + ((y0 + y) * w + x0) * 3;
+                for (int x = 0; x < 8; x++) {
+                    float cur = (p[x*3] + 2 * p[x*3+1] + p[x*3+2]) * 0.25f - 128.0f;
+                    int dl = (int)(res[y * 8 + x] - cur);
+                    p[x*3]   = clamp8(p[x*3] + dl);
+                    p[x*3+1] = clamp8(p[x*3+1] + dl);
+                    p[x*3+2] = clamp8(p[x*3+2] + dl);
+                }
+            }
+        }
+    }
+}

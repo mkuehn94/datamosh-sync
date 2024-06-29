@@ -39,4 +39,7 @@
 #define PERSIST_FRAMES 20     // frames something has to keep moving before we call it an object
 #define ECHO_LAG_FRAMES 15    // how far back in time the echo twin comes from
 
+// how far back the time quake can reach. costs ram (width*height*3*fps per second)
+#define QUAKE_SECONDS 2.0f
+
 #endif
