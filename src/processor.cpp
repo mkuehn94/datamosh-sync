@@ -215,11 +215,13 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // 2. trails - temporal smear, the base layer of the whole look.
     // slider scales it DIRECTLY now. used to be gated at >0.1 which
     // meant mid-low settings did literally nothing (the "gui bug")
-    // not while rotting, blending the clean frame back in is just haze and
-    // the rot smears way better anyway
-    if (params.motion_blur > 0.02f && !rotting) {
+    // while rotting trail against the last OUTPUT. the clean frame would
+    // just leak the real video back in as haze (had it switched off for
+    // that reason but then this slider did nothing at all with rot on)
+    if (params.motion_blur > 0.02f) {
         float trail_amt = params.motion_blur * (0.25f + 0.55f * energy);
-        effects->trails(frame_data, width, height, prev_for_trails, trail_amt);
+        uint8_t* trail_ref = (rotting && held_frame) ? held_frame : prev_for_trails;
+        effects->trails(frame_data, width, height, trail_ref, trail_amt);
     }
 
     // 3. world merge - shadows of the new scene open into the old one.
@@ -377,7 +379,9 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         effects->grab_rect(frame_data, width, height, stuck_buf,
                            stuck_x, stuck_y, stuck_w, stuck_h);
         // old shuffle slider (repurposed) = how long it stays stuck
-        stuck_timer = 20 + (int)(params.block_shuffle * 120) + rand() % 60;
+        // these were frame counts from when everything was 30fps
+        stuck_timer = (int)((20 + params.block_shuffle * 120 + rand() % 60) * fps / 30.0f);
+        cout << "[stuck] " << stuck_timer / fps << "s" << endl;
     }
 
     return af.kick;

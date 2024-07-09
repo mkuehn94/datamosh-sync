@@ -17,8 +17,10 @@ static inline uint8_t clamp8(int v) {
     return v < 0 ? 0 : (v > 255 ? 255 : v);
 }
 
-static inline float rnd() {
-    return rand() / (float)RAND_MAX;
+// own random stream per effect instead of rand(). otherwise moving ANY
+// slider reshuffles everything and you cant tell what that slider did
+static inline float rnd(unsigned* seed) {
+    return rand_r(seed) / (float)RAND_MAX;
 }
 
 WarpEngine::WarpEngine() {
@@ -40,6 +42,9 @@ WarpEngine::WarpEngine() {
     spectral_flip = false;
     spectral_kicks = 0;
     frame_no = 0;
+    warp_seed = 1234;
+    rot_seed = 5678;
+    quake_seed = 91011;
 }
 
 WarpEngine::~WarpEngine() {
@@ -185,19 +190,19 @@ void WarpEngine::build_warp_field(float warp, const AudioFrame& a) {
         int n = 1 + (a.bass > 0.7f ? 1 : 0);
         for (int i = 0; i < n && wells.size() < 8; i++) {
             Well wl;
-            wl.x = w * (0.1f + 0.8f * rnd());
-            wl.y = h * (0.1f + 0.8f * rnd());
-            wl.radius = h * (0.15f + 0.35f * rnd());
-            wl.pull = (rnd() < 0.7f ? 1.0f : -0.8f) * 22.0f * warp * (0.5f + a.bass);
-            wl.spin = (rnd() < 0.5f ? -1.0f : 1.0f) * 28.0f * warp * rnd();
+            wl.x = w * (0.1f + 0.8f * rnd(&warp_seed));
+            wl.y = h * (0.1f + 0.8f * rnd(&warp_seed));
+            wl.radius = h * (0.15f + 0.35f * rnd(&warp_seed));
+            wl.pull = (rnd(&warp_seed) < 0.7f ? 1.0f : -0.8f) * 22.0f * warp * (0.5f + a.bass);
+            wl.spin = (rnd(&warp_seed) < 0.5f ? -1.0f : 1.0f) * 28.0f * warp * rnd(&warp_seed);
             wl.age = 0;
-            wl.life = 0.4f + 1.4f * rnd();
+            wl.life = 0.4f + 1.4f * rnd(&warp_seed);
             wells.push_back(wl);
         }
 
         // vanishing point wanders to a new spot on the kick
-        van_x = w * (0.3f + 0.4f * rnd());
-        van_y = h * (0.3f + 0.4f * rnd());
+        van_x = w * (0.3f + 0.4f * rnd(&warp_seed));
+        van_y = h * (0.3f + 0.4f * rnd(&warp_seed));
     }
     tunnel *= pow(0.02f, dt);  // gone in about a second
 
@@ -243,9 +248,9 @@ void WarpEngine::build_warp_field(float warp, const AudioFrame& a) {
 
 void WarpEngine::start_refresh() {
     refresh_t = 0;
-    refresh_kind = rand() % 3;
-    refresh_x = w * rnd();
-    refresh_y = h * rnd();
+    refresh_kind = rand_r(&rot_seed) % 3;
+    refresh_x = w * rnd(&rot_seed);
+    refresh_y = h * rnd(&rot_seed);
 }
 
 // ===== rot =====
@@ -275,9 +280,9 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
 
     // how fast the picture heals. block by block, never a crossfade.
     // crossfading is what made the old stuff look like movie maker
-    float r = max(rot, warp * 0.5f);
-    float heal = (1.0f - r) * (1.0f - r) * 0.22f + 0.0015f;
-    float luma_heal = (1.0f - r) * 0.28f + 0.012f;
+    float r = rot + (1.0f - rot) * warp * 0.5f;
+    float heal = pow(1.0f - r, 3.0f) * 0.5f + 0.0015f;
+    float luma_heal = pow(1.0f - r, 2.0f) * 0.5f + 0.012f;
     heal *= 30.0f * dt;
     luma_heal *= 30.0f * dt;
 
@@ -302,7 +307,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
 
     // rand() isnt thread safe, roll the dice up front
     vector<unsigned char> dice(gx * gy);
-    for (int i = 0; i < gx * gy; i++) dice[i] = rand() & 255;
+    for (int i = 0; i < gx * gy; i++) dice[i] = rand_r(&rot_seed) & 255;
 
     #pragma omp parallel for schedule(dynamic, 4)
     for (int by = 0; by < gy; by++) {
@@ -450,12 +455,15 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     ring_pos = (ring_pos + 1) % cap;
     if (ring_count < cap) ring_count++;
 
-    if (a.kick) {
+    // low slider = only the hardest kicks make a ring at all
+    float kick_roll = rnd(&quake_seed);
+    float kick_x = rnd(&quake_seed), kick_y = rnd(&quake_seed), kick_s = rnd(&quake_seed);
+    if (a.kick && kick_roll < amount * 2.0f) {
         Ring rg;
-        rg.x = w * (0.15f + 0.7f * rnd());
-        rg.y = h * (0.15f + 0.7f * rnd());
+        rg.x = w * (0.15f + 0.7f * kick_x);
+        rg.y = h * (0.15f + 0.7f * kick_y);
         rg.r = 0;
-        rg.speed = h * (1.2f + 1.6f * rnd());   // crosses the frame in under a sec
+        rg.speed = h * (1.2f + 1.6f * kick_s);   // crosses the frame in under a sec
         rg.strength = amount * (0.4f + 0.6f * a.bass);
         rings.push_back(rg);
         if (rings.size() > 6) rings.erase(rings.begin());
@@ -466,11 +474,11 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
         else i++;
     }
 
-    float band = h * 0.13f;
+    float band = h * (0.03f + 0.1f * amount);
     float max_depth = QUAKE_SECONDS * 0.98f;
     // the past catches up. more quake = time stays broken for longer
-    float catch_up = pow(0.5f, dt / (0.2f + 0.9f * amount));
-    float sink = amount * 0.5f * dt;
+    float catch_up = pow(0.5f, dt / (0.05f + 1.05f * amount));
+    float sink = amount * amount * 0.5f * dt;
     int levels = 3 + (int)(a.treble * 3);   // hats make the sheets finer
 
     vector<float> ox(gx * gy, 0.0f), oy(gx * gy, 0.0f), depth2(gx * gy);
@@ -672,12 +680,16 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
             unsigned r = (((unsigned)(by / 6) * 73856093u) ^ ((unsigned)(bx / 6) * 19349663u) ^ frame_seed) * 2654435761u;
             bool grabbing = first || (r >> 16) / 65536.0f < grab;
 
+            // low slider = only some chunks take part, they swap on every flip
+            unsigned r2 = (((unsigned)(by / 6) * 83492791u) ^ ((unsigned)(bx / 6) * 40503u) ^ ((unsigned)(spectral_kicks / 8) * 2654435761u)) * 2654435761u;
+            bool in_on_it = (r2 >> 16) / 65536.0f < amount * 1.6f;
+
             for (int v = 0; v < 8; v++) {
                 for (int u = 0; u < 8; u++) {
                     int i = v * 8 + u;
                     int f = u + v;
                     bool held = spectral_flip ? (f <= split) : (f > split);
-                    if (!held) {
+                    if (!held || !in_on_it) {
                         m[i] = c[i];
                     } else if (grabbing) {
                         // never quantize DC or the blocks flash

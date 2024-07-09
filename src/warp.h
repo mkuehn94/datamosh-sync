@@ -85,6 +85,8 @@ private:
     bool spectral_flip;
     int spectral_kicks;
     unsigned frame_no;
+
+    unsigned warp_seed, rot_seed, quake_seed;
 };
 
 #endif
