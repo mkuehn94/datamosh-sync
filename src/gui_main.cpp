@@ -90,7 +90,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
     while (gtk_events_pending()) gtk_main_iteration();
 
     run_processing(input, glitch, jpeg, mblur, color, shuffle, beatsync,
-                   rot, warp, spectral, quake);
+                   rot, warp, quake, spectral);
 
     gtk_label_set_text(GTK_LABEL(label_status), "done! check for *_munched.mp4");
     gtk_widget_set_sensitive(btn_process, TRUE);
