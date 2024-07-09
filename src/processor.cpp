@@ -221,7 +221,12 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     if (params.motion_blur > 0.02f) {
         float trail_amt = params.motion_blur * (0.25f + 0.55f * energy);
         uint8_t* trail_ref = (rotting && held_frame) ? held_frame : prev_for_trails;
-        effects->trails(frame_data, width, height, trail_ref, trail_amt);
+        if (trail_ref) {
+            int n = width * height * 3;
+            for (int i = 0; i < n; i++) {
+                frame_data[i] = (uint8_t)(frame_data[i] * (1.0f - trail_amt) + trail_ref[i] * trail_amt);
+            }
+        }
     }
 
     // 3. world merge - shadows of the new scene open into the old one.
