@@ -39,16 +39,19 @@ static void run_processing(const char* input, float glitch, float jpeg,
                             float rot, float warp, float quake, float spectral) {
     char s_glitch[16], s_jpeg[16], s_mblur[16], s_color[16], s_shuffle[16], s_beatsync[16];
     char s_rot[16], s_warp[16], s_quake[16], s_spectral[16];
-    snprintf(s_glitch,   sizeof(s_glitch),   "%.3f", glitch);
-    snprintf(s_jpeg,     sizeof(s_jpeg),     "%.1f", jpeg);
-    snprintf(s_mblur,    sizeof(s_mblur),    "%.3f", mblur);
-    snprintf(s_color,    sizeof(s_color),    "%.3f", color);
-    snprintf(s_shuffle,  sizeof(s_shuffle),  "%.3f", shuffle);
-    snprintf(s_beatsync, sizeof(s_beatsync), "%.3f", beatsync);
-    snprintf(s_rot,      sizeof(s_rot),      "%.3f", rot);
-    snprintf(s_warp,     sizeof(s_warp),     "%.3f", warp);
-    snprintf(s_quake,    sizeof(s_quake),    "%.3f", quake);
-    snprintf(s_spectral, sizeof(s_spectral), "%.3f", spectral);
+    // NOT snprintf. gtk_init sets the locale, so on a german system %.3f
+    // gives "0,500" and the backend's atof reads that as 0. every slider
+    // did nothing until it hit exactly 1,000
+    g_ascii_formatd(s_glitch, sizeof(s_glitch), "%.3f", glitch);
+    g_ascii_formatd(s_jpeg, sizeof(s_jpeg), "%.1f", jpeg);
+    g_ascii_formatd(s_mblur, sizeof(s_mblur), "%.3f", mblur);
+    g_ascii_formatd(s_color, sizeof(s_color), "%.3f", color);
+    g_ascii_formatd(s_shuffle, sizeof(s_shuffle), "%.3f", shuffle);
+    g_ascii_formatd(s_beatsync, sizeof(s_beatsync), "%.3f", beatsync);
+    g_ascii_formatd(s_rot, sizeof(s_rot), "%.3f", rot);
+    g_ascii_formatd(s_warp, sizeof(s_warp), "%.3f", warp);
+    g_ascii_formatd(s_quake, sizeof(s_quake), "%.3f", quake);
+    g_ascii_formatd(s_spectral, sizeof(s_spectral), "%.3f", spectral);
 
     pid_t pid = fork();
     if (pid == 0) {

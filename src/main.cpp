@@ -47,6 +47,15 @@ int mux_audio(const string& video, const string& audio_src, const string& out) {
     return WEXITSTATUS(status);
 }
 
+// atof stops at a comma, "0,5" would silently be 0
+static float parse_arg(const char* a) {
+    string s = a;
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == ',') s[i] = '.';
+    }
+    return atof(s.c_str());  // TODO strtof
+}
+
 int main(int argc, char** argv) {
     cout << "datamosh-sync v0.3" << endl;
 
@@ -106,20 +115,20 @@ int main(int argc, char** argv) {
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
     // only override if all 6 are provided
     if (argc >= 9) {
-        params.glitch_intensity = atof(argv[3]);
-        params.jpeg_quality     = atof(argv[4]);
-        params.motion_blur      = atof(argv[5]);
-        params.color_shift      = atof(argv[6]);
-        params.block_shuffle    = atof(argv[7]);
-        params.beat_sync        = atof(argv[8]);
+        params.glitch_intensity = parse_arg(argv[3]);
+        params.jpeg_quality     = parse_arg(argv[4]);
+        params.motion_blur      = parse_arg(argv[5]);
+        params.color_shift      = parse_arg(argv[6]);
+        params.block_shuffle    = parse_arg(argv[7]);
+        params.beat_sync        = parse_arg(argv[8]);
         cout << "using custom params from args" << endl;
     }
     // <rot> <warp> <quake> <spectral> go after those
     if (argc >= 13) {
-        params.rot      = atof(argv[9]);
-        params.warp     = atof(argv[10]);
-        params.quake    = atof(argv[11]);
-        params.spectral = atof(argv[12]);
+        params.rot      = parse_arg(argv[9]);
+        params.warp     = parse_arg(argv[10]);
+        params.quake    = parse_arg(argv[11]);
+        params.spectral = parse_arg(argv[12]);
     }
 
     cout << "processing..." << endl;
