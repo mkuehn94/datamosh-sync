@@ -45,6 +45,10 @@ WarpEngine::WarpEngine() {
     warp_seed = 1234;
     rot_seed = 5678;
     quake_seed = 91011;
+    bar_kicks = 0;
+    loop_pos = 0;
+    loop_slice = 0;
+    bar_no = 0;
 }
 
 WarpEngine::~WarpEngine() {
@@ -253,6 +257,43 @@ void WarpEngine::start_refresh() {
     refresh_y = h * rnd(&rot_seed);
 }
 
+// ===== motion sampler =====
+// tape the vectors of one bar, then replay them like a sample. every kick
+// jumps to the next slice of the loop so it stays locked to the music
+
+void WarpEngine::update_sampler(const AudioFrame& a) {
+    rec_x.push_back(mvx);
+    rec_y.push_back(mvy);
+    if (a.kick) {
+        rec_kicks.push_back((int)rec_x.size() - 1);
+        bar_kicks++;
+    }
+
+    bool bar_done = a.kick && bar_kicks >= SAMPLER_BAR_KICKS;
+    // no kicks for ages (quiet part), dont tape forever
+    if (rec_x.size() > (size_t)(fps * 6)) bar_done = true;
+
+    if (bar_done) {
+        loop_x = rec_x;
+        loop_y = rec_y;
+        loop_kicks = rec_kicks;
+        rec_x.clear();
+        rec_y.clear();
+        rec_kicks.clear();
+        bar_kicks = 0;
+        loop_pos = 0;
+        loop_slice = 0;
+        bar_no++;
+    } else if (a.kick && !loop_kicks.empty()) {
+        loop_slice++;
+        if (loop_slice >= (int)loop_kicks.size()) loop_slice = 0;
+        loop_pos = loop_kicks[loop_slice];
+    } else if (!loop_x.empty()) {
+        loop_pos++;
+        if (loop_pos >= (int)loop_x.size()) loop_pos = 0;
+    }
+}
+
 // ===== rot =====
 // this is literally what a decoder does:
 //    out(x) = ref(x + mv) + residual
@@ -262,7 +303,7 @@ void WarpEngine::start_refresh() {
 // outlines. thats THE datamosh look, and we get to do it per block, on
 // purpose, in sync, with vectors we made up
 
-void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioFrame& a) {
+void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
     int size = w * h * 3;
 
     if (!canvas_ready) {
@@ -271,7 +312,9 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
         canvas_ready = true;
         return;
     }
-    if (rot < 0.01f && warp < 0.01f) {
+    if (groove > 0.01f) update_sampler(a);
+
+    if (rot < 0.01f && warp < 0.01f && groove < 0.01f) {
         memcpy(prev_src, data, size);
         return;
     }
@@ -281,6 +324,8 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
     // how fast the picture heals. block by block, never a crossfade.
     // crossfading is what made the old stuff look like movie maker
     float r = rot + (1.0f - rot) * warp * 0.5f;
+    // the sampler needs the picture to stick around or you never see it
+    r = r + (1.0f - r) * groove * 0.6f;
     float heal = pow(1.0f - r, 3.0f) * 0.5f + 0.0015f;
     float luma_heal = pow(1.0f - r, 2.0f) * 0.5f + 0.012f;
     heal *= 30.0f * dt;
@@ -327,6 +372,18 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, const AudioF
             rem_y[idx] = want_y - wy;
             int vx = mx + wx;
             int vy = my + wy;
+
+            // this chunk is possessed by the tape? then it moves how the
+            // picture moved a bar ago and not how its moving now. which chunks
+            // changes every bar
+            if (groove > 0.01f && !loop_x.empty()) {
+                unsigned hh = ((unsigned)(by / 4) * 73856093u) ^ ((unsigned)(bx / 4) * 19349663u) ^ ((unsigned)bar_no * 83492791u);
+                hh = hh * 2654435761u;
+                if ((hh >> 16) / 65536.0f < groove * 1.4f) {
+                    vx = loop_x[loop_pos][idx] + wx;
+                    vy = loop_y[loop_pos][idx] + wy;
+                }
+            }
 
             // what would an encoder do with this block
             int mode = 0;  // 0 = inter, 1 = intra (clean), 2 = no residual, 3 = luma only
@@ -716,3 +773,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
         }
     }
 }
+
+// filled in next
+void WarpEngine::block_recursion(uint8_t*, float, const AudioFrame&) {}
+void WarpEngine::texture_swap(uint8_t*, float, const AudioFrame&) {}

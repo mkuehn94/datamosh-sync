@@ -20,6 +20,9 @@ struct ProcessParams {
     float warp;      // hijacked motion vectors, gravity wells
     float quake;     // blocks living in different moments
     float spectral;  // frequencies living in different moments
+    float groove;    // motion sampler, replays the vectors of the last bar
+    float texswap;   // blocks wearing the texture of other blocks
+    float recursion; // tiny copies of the frame inside the frame
 };
 
 class VideoMosher {

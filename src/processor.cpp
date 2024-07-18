@@ -186,8 +186,9 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // of the chain first but then the residuals of all the other effects
     // (zoom pulse especially) pile up in the canvas and in about 5 seconds
     // the whole picture is tv static
-    warp->rot_and_warp(frame_data, params.rot, params.warp, af);
-    bool rotting = params.rot > 0.01f || params.warp > 0.01f;
+    warp->rot_and_warp(frame_data, params.rot, params.warp, params.groove, af);
+    bool rotting = params.rot > 0.01f || params.warp > 0.01f || params.groove > 0.01f;
+    warp->block_recursion(frame_data, params.recursion, af);
 
     // ============================================================
     // KILLED the old pipeline (motion_vector_glitch, datamosh_streak,
@@ -346,6 +347,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
                                     0, 0, 1);
     }
 
+    warp->texture_swap(frame_data, params.texswap, af);
     warp->spectral_lag(frame_data, params.spectral, af);
     warp->time_quake(frame_data, params.quake, af);
 
@@ -489,6 +491,8 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     cout << "beat sync: " << params.beat_sync << endl;
     cout << "rot: " << params.rot << "  warp: " << params.warp
          << "  quake: " << params.quake << "  spectral: " << params.spectral << endl;
+    cout << "groove: " << params.groove << "  texswap: " << params.texswap
+         << "  recursion: " << params.recursion << endl;
 
     int width = video->get_width();
     int height = video->get_height();

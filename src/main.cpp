@@ -109,7 +109,10 @@ int main(int argc, char** argv) {
         0.45f,  // rot
         0.3f,   // warp
         0.25f,  // quake
-        0.2f    // spectral
+        0.2f,   // spectral
+        0.3f,   // groove
+        0.25f,  // texswap
+        0.2f    // recursion
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
@@ -129,6 +132,12 @@ int main(int argc, char** argv) {
         params.warp     = parse_arg(argv[10]);
         params.quake    = parse_arg(argv[11]);
         params.spectral = parse_arg(argv[12]);
+    }
+    // and <groove> <texswap> <recursion> after that
+    if (argc >= 16) {
+        params.groove    = parse_arg(argv[13]);
+        params.texswap   = parse_arg(argv[14]);
+        params.recursion = parse_arg(argv[15]);
     }
 
     cout << "processing..." << endl;

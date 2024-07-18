@@ -28,7 +28,9 @@ public:
     void estimate_motion(const uint8_t* rgb);
     bool scene_cut() { return cut_detected; }
 
-    void rot_and_warp(uint8_t* data, float rot, float warp, const AudioFrame& a);
+    void rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a);
+    void block_recursion(uint8_t* data, float amount, const AudioFrame& a);
+    void texture_swap(uint8_t* data, float amount, const AudioFrame& a);
     void time_quake(uint8_t* data, float amount, const AudioFrame& a);
     void spectral_lag(uint8_t* data, float amount, const AudioFrame& a);
 
@@ -46,6 +48,7 @@ private:
     };
 
     void build_warp_field(float warp, const AudioFrame& a);
+    void update_sampler(const AudioFrame& a);
     void start_refresh();
 
     int w, h, gx, gy;
@@ -87,6 +90,12 @@ private:
     unsigned frame_no;
 
     unsigned warp_seed, rot_seed, quake_seed;
+
+    // motion sampler. records the vectors of one bar and plays them back
+    // like a drum loop
+    std::vector<std::vector<short> > rec_x, rec_y, loop_x, loop_y;
+    std::vector<int> rec_kicks, loop_kicks;   // which frames had a kick
+    int bar_kicks, loop_pos, loop_slice, bar_no;
 };
 
 #endif
