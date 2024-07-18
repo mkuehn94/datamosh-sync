@@ -56,7 +56,7 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 ./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral>
 
 # defaults
-./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.6 0.4 0.4 0.3
+./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2
 # only the new stuff, melt everything
 ./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1
 ```

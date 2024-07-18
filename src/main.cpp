@@ -106,10 +106,10 @@ int main(int argc, char** argv) {
         0.2f,   // color_shift
         0.3f,   // block_shuffle
         0.7f,   // beat_sync
-        0.6f,   // rot
-        0.4f,   // warp
-        0.4f,   // quake
-        0.3f    // spectral
+        0.45f,  // rot
+        0.3f,   // warp
+        0.25f,  // quake
+        0.2f    // spectral
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>

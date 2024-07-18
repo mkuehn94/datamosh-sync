@@ -179,10 +179,10 @@ int main(int argc, char** argv) {
 
     gtk_box_pack_start(GTK_BOX(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
 
-    slider_rot      = make_slider(sliders_box, "ROT (decoder lost its keyframes)",   0.0, 1.0, 0.6, 0.01);
-    slider_warp     = make_slider(sliders_box, "WARP (tunnel + gravity wells)",      0.0, 1.0, 0.4, 0.01);
-    slider_quake    = make_slider(sliders_box, "TIME QUAKE (uses a lot of ram)",     0.0, 1.0, 0.4, 0.01);
-    slider_spectral = make_slider(sliders_box, "SPECTRAL LAG (two moments at once)", 0.0, 1.0, 0.3, 0.01);
+    slider_rot      = make_slider(sliders_box, "ROT (decoder lost its keyframes)",   0.0, 1.0, 0.45, 0.01);
+    slider_warp     = make_slider(sliders_box, "WARP (tunnel + gravity wells)",      0.0, 1.0, 0.3, 0.01);
+    slider_quake    = make_slider(sliders_box, "TIME QUAKE (uses a lot of ram)",     0.0, 1.0, 0.25, 0.01);
+    slider_spectral = make_slider(sliders_box, "SPECTRAL LAG (two moments at once)", 0.0, 1.0, 0.2, 0.01);
 
     // --- separator ---
     gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
