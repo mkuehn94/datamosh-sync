@@ -1,4 +1,4 @@
-// warp.cpp - fake decoder that lost it's mind
+// warp.cpp - fake decoder that lost its mind
 // see warp.h for the idea
 
 #include "warp.h"
@@ -49,11 +49,17 @@ WarpEngine::WarpEngine() {
     loop_pos = 0;
     loop_slice = 0;
     bar_no = 0;
+    recur_prev = nullptr;
+    recur_seed = 121314;
+    tex_kicks = 0;
+    frame_crawl = 0;
+    tex_seed = 151617;
 }
 
 WarpEngine::~WarpEngine() {
     free(luma); free(prev_luma); free(small); free(prev_small);
     free(canvas); free(canvas_tmp); free(prev_src);
+    free(recur_prev);
     for (size_t i = 0; i < ring_frames.size(); i++) free(ring_frames[i]);
 }
 
@@ -774,6 +780,203 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
     }
 }
 
-// filled in next
-void WarpEngine::block_recursion(uint8_t*, float, const AudioFrame&) {}
-void WarpEngine::texture_swap(uint8_t*, float, const AudioFrame&) {}
+// ===== block recursion =====
+// on a kick some rectangles fill up with tiny copies of the whole frame. they
+// read from the LAST output, which already has the old tiny copies in it, so
+// you get copies inside copies inside copies. also written into the rot canvas
+// so when a cell dies it doesnt just vanish, it melts away
+//
+// nearest neighbor, one pixel at a time. slow and jaggy and thats the look
+
+void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& a) {
+    if (amount < 0.01f) return;
+
+    int size = w * h * 3;
+    if (!recur_prev) {
+        recur_prev = (uint8_t*)malloc(size);
+        memcpy(recur_prev, data, size);
+    }
+
+    if (a.kick) {
+        int n = (int)(amount * 5.0f + rnd(&recur_seed));
+        for (int i = 0; i < n; i++) {
+            if (cells.size() > 24) break;
+            Cell c;
+            // size in macroblocks, keeps the frame shape so the copies arent squished
+            int mult = 1;
+            if (h >= 800) mult = 2;
+            c.ch = BLOCK * mult * (2 + rand_r(&recur_seed) % (2 + (int)(amount * 9.0f)));
+            c.cw = (c.ch * w / h) / BLOCK * BLOCK;
+            if (c.cw < BLOCK) c.cw = BLOCK;
+            if (c.ch > h) c.ch = h;
+            if (c.cw > w) c.cw = w;
+            c.x = (rand_r(&recur_seed) % (w - c.cw + 1)) / BLOCK * BLOCK;
+            c.y = (rand_r(&recur_seed) % (h - c.ch + 1)) / BLOCK * BLOCK;
+            c.tiles = 1 + rand_r(&recur_seed) % 3;
+            c.age = 0;
+            c.life = 0.12f + rnd(&recur_seed) * amount * 0.9f;
+            cells.push_back(c);
+        }
+        printf("cells: %d\n", (int)cells.size());
+        // the really big hits: whole frame goes for a moment
+        if (amount > 0.5f && a.bass > 0.85f && rnd(&recur_seed) < amount * 0.5f) {
+            Cell c;
+            c.x = 0; c.y = 0;
+            c.cw = w; c.ch = h;
+            c.tiles = 2 + rand_r(&recur_seed) % 2;
+            c.age = 0;
+            c.life = 0.1f;
+            cells.push_back(c);
+        }
+    }
+
+    for (size_t i = 0; i < cells.size(); i++) {
+        Cell& c = cells[i];
+        // slowly fall into the copy while it lives
+        float zoom = 1.0f - 0.35f * (c.age / c.life);
+        int tile_w = c.cw / c.tiles;
+        int tile_h = c.ch / c.tiles;
+        if (tile_w < 1) tile_w = 1;
+        if (tile_h < 1) tile_h = 1;
+
+        for (int y = 0; y < c.ch; y++) {
+            for (int x = 0; x < c.cw; x++) {
+                float u = (x % tile_w) / (float)tile_w;
+                float v = (y % tile_h) / (float)tile_h;
+                int sx = (int)((0.5f + (u - 0.5f) * zoom) * w);
+                int sy = (int)((0.5f + (v - 0.5f) * zoom) * h);
+                if (sx >= w) sx = w - 1;
+                if (sy >= h) sy = h - 1;
+
+                int src = (sy * w + sx) * 3;
+                int dst = ((c.y + y) * w + c.x + x) * 3;
+                data[dst] = recur_prev[src];
+                data[dst+1] = recur_prev[src+1];
+                data[dst+2] = recur_prev[src+2];
+                canvas[dst] = recur_prev[src];
+                canvas[dst+1] = recur_prev[src+1];
+                canvas[dst+2] = recur_prev[src+2];
+            }
+        }
+        c.age += dt;
+    }
+
+    for (size_t i = 0; i < cells.size();) {
+        if (cells[i].age > cells[i].life) cells.erase(cells.begin() + i);
+        else i++;
+    }
+
+    memcpy(recur_prev, data, size);
+}
+
+// ===== texture swap =====
+// every pixel = big blurry brightness + fine stuff on top. keep your own
+// big brightness and wear the fine stuff of a chunk from somewhere else. road
+// with a house on it, colors stay. kicks pick new places to steal from and
+// the stolen piece slowly crawls so it looks alive
+//
+// not in the dct, 8x8 is too small for this. a window is bigger than 8 pixels,
+// so its a grid of averages
+
+void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) {
+    if (amount < 0.01f) return;
+
+    int cell = 32;
+    if (h >= 800) cell = 64;
+    int chunk = cell * 3;
+
+    int gw = w / cell + 1, gh = h / cell + 1;
+    int cw = w / chunk + 1, ch = h / chunk + 1;
+
+    bool first = tex_off_x.empty();
+    if (first) {
+        tex_off_x.assign(cw * ch, 0);
+        tex_off_y.assign(cw * ch, 0);
+    }
+
+    // copy of the luma, we write into data while reading this
+    vector<int> lum(w * h);
+    for (int i = 0; i < w * h; i++) {
+        lum[i] = (data[i*3] + 2 * data[i*3+1] + data[i*3+2]) / 4;
+    }
+
+    // average brightness per grid cell
+    vector<int> cell_sum(gw * gh, 0), cell_n(gw * gh, 0);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            int g = (y / cell) * gw + x / cell;
+            cell_sum[g] += lum[y * w + x];
+            cell_n[g]++;
+        }
+    }
+    vector<int> cell_avg(gw * gh, 0);
+    for (int i = 0; i < gw * gh; i++) {
+        if (cell_n[i] > 0) cell_avg[i] = cell_sum[i] / cell_n[i];
+    }
+
+    // pick new places. tries a few random spots and keeps the one with the
+    // most going on, stealing from flat sky just gives you a blurry road
+    if (a.kick || first) {
+        tex_kicks++;
+        float reroll = 0.15f + 0.35f * a.bass;
+        if (first || tex_kicks % 8 == 0) reroll = 1.0f;
+
+        for (int i = 0; i < cw * ch; i++) {
+            if (rnd(&tex_seed) > reroll) continue;
+            float best = -1;
+            int best_x = 0, best_y = 0;
+            for (int t = 0; t < 6; t++) {
+                int sx = rand_r(&tex_seed) % w;
+                int sy = rand_r(&tex_seed) % h;
+                // how busy is it there, only looks at every 4th pixel
+                float busy = 0;
+                for (int yy = sy; yy < sy + chunk && yy < h; yy += 4) {
+                    for (int xx = sx; xx < sx + chunk && xx < w; xx += 4) {
+                        busy += abs(lum[yy * w + xx] - cell_avg[(yy / cell) * gw + xx / cell]);
+                    }
+                }
+                if (busy > best) {
+                    best = busy;
+                    best_x = sx;
+                    best_y = sy;
+                }
+            }
+            tex_off_x[i] = best_x;
+            tex_off_y[i] = best_y;
+        }
+    }
+
+    float gain = 1.0f + amount * 0.4f;
+    int kick_group = tex_kicks / 8;
+    int crawl = (int)frame_crawl;
+
+    #pragma omp parallel for schedule(dynamic, 8)
+    for (int y = 0; y < h; y++) {
+        int cy = y / chunk;
+        for (int x = 0; x < w; x++) {
+            int cx = x / chunk;
+
+            // low slider = only some chunks join in
+            unsigned hh = ((unsigned)cy * 73856093u) ^ ((unsigned)cx * 19349663u) ^ ((unsigned)kick_group * 83492791u);
+            hh = hh * 2654435761u;
+            if ((hh >> 16) / 65536.0f > amount * 1.6f) continue;
+
+            int ci = cy * cw + cx;
+            int sx = (tex_off_x[ci] + (x - cx * chunk) + crawl) % w;
+            int sy = (tex_off_y[ci] + (y - cy * chunk)) % h;
+
+            int own_low = cell_avg[(y / cell) * gw + x / cell];
+            int src_low = cell_avg[(sy / cell) * gw + sx / cell];
+            int stolen = (int)((lum[sy * w + sx] - src_low) * gain);
+
+            int dl = own_low + stolen - lum[y * w + x];
+            int di = (y * w + x) * 3;
+            data[di]   = clamp8(data[di] + dl);
+            data[di+1] = clamp8(data[di+1] + dl);
+            data[di+2] = clamp8(data[di+2] + dl);
+        }
+    }
+
+    // pixels per second, treble speeds it up
+    frame_crawl += (10.0f + a.treble * 40.0f) * scale * 2.0f * dt;
+}

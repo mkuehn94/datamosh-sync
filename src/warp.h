@@ -96,6 +96,22 @@ private:
     std::vector<std::vector<short> > rec_x, rec_y, loop_x, loop_y;
     std::vector<int> rec_kicks, loop_kicks;   // which frames had a kick
     int bar_kicks, loop_pos, loop_slice, bar_no;
+
+    // recursion
+    struct Cell {
+        int x, y, cw, ch;
+        int tiles;
+        float age, life;
+    };
+    std::vector<Cell> cells;
+    uint8_t* recur_prev;
+    unsigned recur_seed;
+
+    // texture swap
+    std::vector<int> tex_off_x, tex_off_y;   // per chunk, where it steals from
+    int tex_kicks;
+    float frame_crawl;
+    unsigned tex_seed;
 };
 
 #endif
