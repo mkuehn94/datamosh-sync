@@ -51,14 +51,20 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
   shockwave through time. RAM: width*height*3*fps*2 bytes (560MB for 1440x1080 at 60fps)
 - SPECTRAL LAG: real 8x8 dct, frequencies held at different times. edges
   from now, brightness from seconds ago. flips every 8 kicks
+- MOTION SAMPLER: tapes the vectors of 8 beats and loops them like a drum
+  sample on the current picture. high = stained glass
+- TEXTURE SWAP: blocks keep their brightness and wear the detail of another
+  place. road with windows on it
+- RECURSION: kicks fill rectangles with tiny copies of the frame, copies
+  inside copies, then they melt
 
 ```
-./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral>
+./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral> <groove> <texswap> <recursion>
 
 # defaults
-./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2
+./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2 0.3 0.25 0.2
 # only the new stuff, melt everything
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1 0.8 0.8 0.8
 ```
 
 old effects list:
