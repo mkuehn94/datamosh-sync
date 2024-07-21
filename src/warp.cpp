@@ -817,7 +817,6 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
             c.life = 0.12f + rnd(&recur_seed) * amount * 0.9f;
             cells.push_back(c);
         }
-        printf("cells: %d\n", (int)cells.size());
         // the really big hits: whole frame goes for a moment
         if (amount > 0.5f && a.bass > 0.85f && rnd(&recur_seed) < amount * 0.5f) {
             Cell c;
