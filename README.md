@@ -62,9 +62,18 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 ./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral> <groove> <texswap> <recursion>
 
 # defaults
-./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2 0.3 0.25 0.2
-# only the new stuff, melt everything
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1 0.8 0.8 0.8
+./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2 0.1 0.12 0.1
+# melt
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1 0 0 0
+# oil painting / stained glass
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.5 0.2 0 0 0.8 0 0
+# shuffled city collage
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.3 0.2 0.15 0 0 0.7 0.35
+```
+
+NOTE dont put everything up high at once, its just grey noise. pick 2 or 3
+
+```
 ```
 
 old effects list:

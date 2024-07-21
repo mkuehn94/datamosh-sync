@@ -110,9 +110,9 @@ int main(int argc, char** argv) {
         0.3f,   // warp
         0.25f,  // quake
         0.2f,   // spectral
-        0.3f,   // groove
-        0.25f,  // texswap
-        0.2f    // recursion
+        0.1f,   // groove
+        0.12f,  // texswap
+        0.1f    // recursion
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
