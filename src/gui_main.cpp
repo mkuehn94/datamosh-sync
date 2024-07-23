@@ -202,7 +202,7 @@ int main(int argc, char** argv) {
     slider_groove   = make_slider(sliders_box, "MOTION SAMPLER (loops the motion of a bar)", 0.0, 1.0, 0.1, 0.01);
     slider_texswap  = make_slider(sliders_box, "TEXTURE SWAP (road wearing a house)",  0.0, 1.0, 0.12, 0.01);
     slider_recursion = make_slider(sliders_box, "RECURSION (frames inside frames)",    0.0, 1.0, 0.1, 0.01);
-    slider_hom = make_slider(sliders_box, "HALL OF MIRRORS (noclip, how long the screen stays dirty)", 0.0, 1.0, 0.25, 0.01);
+    slider_hom = make_slider(sliders_box, "HALL OF MIRRORS (noclip, how long the screen stays dirty)", 0.0, 1.0, 0.12, 0.01);
 
     // --- separator ---
     gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);

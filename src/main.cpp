@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
         0.1f,   // groove
         0.12f,  // texswap
         0.1f,   // recursion
-        0.25f   // hall of mirrors
+        0.12f   // hall of mirrors, was .25
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
