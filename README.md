@@ -73,9 +73,6 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 
 NOTE dont put everything up high at once, its just grey noise. pick 2 or 3
 
-```
-```
-
 old effects list:
 - motion vector glitching
 - jpeg corruption
