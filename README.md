@@ -57,18 +57,23 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
   place. road with windows on it
 - RECURSION: kicks fill rectangles with tiny copies of the frame, copies
   inside copies, then they melt
+- HALL OF MIRRORS: the noclip thing. screen doesnt clear, moving stuff gets
+  drawn on top over and over and leaves copies. works on a moving camera too,
+  it guesses the camera motion and an empty background. clears land on kicks
 
 ```
-./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral> <groove> <texswap> <recursion>
+./datamosh-sync video.mp4 "" <glitch> <void_tol> <blur> <void_depth> <stuck> <beatsync> <rot> <warp> <quake> <spectral> <groove> <texswap> <recursion> <hom>
 
 # defaults
-./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2 0.1 0.12 0.1
+./datamosh-sync video.mp4 "" 0.5 65 0.3 0.2 0.3 0.7 0.45 0.3 0.25 0.2 0.1 0.12 0.1 0.25
 # melt
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1 0 0 0
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0.92 1 0.8 1 0 0 0 0
 # oil painting / stained glass
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.5 0.2 0 0 0.8 0 0
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.5 0.2 0 0 0.8 0 0 0
 # shuffled city collage
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.3 0.2 0.15 0 0 0.7 0.35
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.3 0.2 0.15 0 0 0.7 0.35 0
+# noclip, cars pile up behind themselves
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0 0 0 0 0 0 0 0.6
 ```
 
 NOTE dont put everything up high at once, its just grey noise. pick 2 or 3

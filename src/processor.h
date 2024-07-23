@@ -23,6 +23,7 @@ struct ProcessParams {
     float groove;    // motion sampler, replays the vectors of the last bar
     float texswap;   // blocks wearing the texture of other blocks
     float recursion; // tiny copies of the frame inside the frame
+    float hom;       // hall of mirrors, the noclip screen that never clears
 };
 
 class VideoMosher {

@@ -50,6 +50,10 @@ WarpEngine::WarpEngine() {
     loop_slice = 0;
     bar_no = 0;
     recur_prev = nullptr;
+    hom_buf = nullptr;
+    hom_ref = nullptr;
+    hom_ref_tmp = nullptr;
+    hom_seed = 181920;
     recur_seed = 121314;
     tex_kicks = 0;
     frame_crawl = 0;
@@ -60,6 +64,9 @@ WarpEngine::~WarpEngine() {
     free(luma); free(prev_luma); free(small); free(prev_small);
     free(canvas); free(canvas_tmp); free(prev_src);
     free(recur_prev);
+    free(hom_buf);
+    free(hom_ref);
+    free(hom_ref_tmp);
     for (size_t i = 0; i < ring_frames.size(); i++) free(ring_frames[i]);
 }
 
@@ -978,4 +985,203 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
 
     // pixels per second, treble speeds it up
     frame_crawl += (10.0f + a.treble * 40.0f) * scale * 2.0f * dt;
+}
+
+// ===== hall of mirrors =====
+// what happens when you noclip out of the map. nothing clears the screen, so
+// the world stays where it was and whatever moves gets drawn on top over and
+// over and leaves copies of itself
+//
+// problem: on a drone shot EVERYTHING moves. so first guess what the camera is
+// doing (fit a flat plane through all the vectors, x and y separately), then
+// only stuff that moves DIFFERENT from that counts as an object
+
+void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& a) {
+    if (amount < 0.01f) return;
+
+    int size = w * h * 3;
+    int chunk = h / 8;
+    if (chunk < 16) chunk = 16;
+    int cw = w / chunk + 1, ch = h / chunk + 1;
+
+    if (!hom_buf) {
+        hom_buf = (uint8_t*)malloc(size);
+        hom_ref = (uint8_t*)malloc(w * h);
+        hom_ref_tmp = (uint8_t*)malloc(w * h);
+        memcpy(hom_buf, data, size);
+        memcpy(hom_ref, luma, w * h);
+        hom_age.assign(cw * ch, 0.0f);
+        return;
+    }
+
+    // which blocks can we even trust
+    // flat blocks (sky, road) dont know where they went, their vectors are junk
+    vector<char> usable(gx * gy, 0);
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int lo = 255, hi = 0;
+            for (int y = 0; y < BLOCK; y += 2) {
+                for (int x = 0; x < BLOCK; x += 2) {
+                    int v = luma[(by * BLOCK + y) * w + bx * BLOCK + x];
+                    if (v < lo) lo = v;
+                    if (v > hi) hi = v;
+                }
+            }
+            if (hi - lo > 24 && block_err[by * gx + bx] < 30) usable[by * gx + bx] = 1;
+        }
+    }
+
+    // fit the camera
+    // vx = ax*x + bx*y + cx, vy = ay*x + by*y + cy. least squares written out
+    // by hand, twice, second time without the blocks that didnt fit the first
+    float ax = 0, bx_ = 0, cx_ = 0, ay = 0, by_ = 0, cy_ = 0;
+    vector<char> inlier = usable;
+    for (int pass = 0; pass < 2; pass++) {
+        double sxx = 0, sxy = 0, syy = 0, sx = 0, sy = 0, n = 0;
+        double sxu = 0, syu = 0, su = 0, sxv = 0, syv = 0, sv = 0;
+        for (int by = 0; by < gy; by++) {
+            for (int bx = 0; bx < gx; bx++) {
+                int i = by * gx + bx;
+                if (!inlier[i]) continue;
+                double x = bx, y = by;
+                double u = mvx[i], v = mvy[i];
+                sxx += x * x; sxy += x * y; syy += y * y;
+                sx += x; sy += y; n += 1;
+                sxu += x * u; syu += y * u; su += u;
+                sxv += x * v; syv += y * v; sv += v;
+            }
+        }
+        double det = sxx * (syy * n - sy * sy) - sxy * (sxy * n - sy * sx) + sx * (sxy * sy - syy * sx);
+        if (n < 12 || fabs(det) < 1e-3) break;  // nothing to go on, camera stays 0
+
+        ax  = (sxu * (syy * n - sy * sy) - sxy * (syu * n - sy * su) + sx * (syu * sy - syy * su)) / det;
+        bx_ = (sxx * (syu * n - sy * su) - sxu * (sxy * n - sy * sx) + sx * (sxy * su - syu * sx)) / det;
+        cx_ = (sxx * (syy * su - sy * syu) - sxy * (sxy * su - sx * syu) + sxu * (sxy * sy - syy * sx)) / det;
+        ay  = (sxv * (syy * n - sy * sy) - sxy * (syv * n - sy * sv) + sx * (syv * sy - syy * sv)) / det;
+        by_ = (sxx * (syv * n - sy * sv) - sxv * (sxy * n - sy * sx) + sx * (sxy * sv - syv * sx)) / det;
+        cy_ = (sxx * (syy * sv - sy * syv) - sxy * (sxy * sv - sx * syv) + sxv * (sxy * sy - syy * sx)) / det;
+
+        // throw out whatever is far from the fit
+        for (int by = 0; by < gy; by++) {
+            for (int bx = 0; bx < gx; bx++) {
+                int i = by * gx + bx;
+                float dx = mvx[i] - (ax * bx + bx_ * by + cx_);
+                float dy = mvy[i] - (ay * bx + by_ * by + cy_);
+                inlier[i] = usable[i] && fabs(dx) + fabs(dy) < 6.0f;
+            }
+        }
+    }
+
+    // what moves different from the camera
+    vector<float> off(gx * gy, 0.0f);
+    vector<float> sorted;
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int i = by * gx + bx;
+            if (!usable[i]) continue;
+            float dx = mvx[i] - (ax * bx + bx_ * by + cx_);
+            float dy = mvy[i] - (ay * bx + by_ * by + cy_);
+            off[i] = fabs(dx) + fabs(dy);
+            sorted.push_back(off[i]);
+        }
+    }
+    // never more than the top ~15% counts, the plane fit isnt great on a drone
+    // and otherwise half the buildings count as objects
+    float limit = 3.0f + 3.0f * scale;
+    if (!sorted.empty()) {
+        sort(sorted.begin(), sorted.end());
+        float top = sorted[(size_t)(sorted.size() * 0.85f)];
+        if (top > limit) limit = top;
+    }
+
+    vector<char> obj(gx * gy, 0);
+    for (int by = 0; by < gy; by++) {
+        for (int bx = 0; bx < gx; bx++) {
+            int i = by * gx + bx;
+            if (off[i] <= limit) continue;
+            // lonely blocks are nearly always wrong matches
+            int friends = 0;
+            for (int j = max(0, by - 1); j <= min(gy - 1, by + 1); j++) {
+                for (int k = max(0, bx - 1); k <= min(gx - 1, bx + 1); k++) {
+                    if (off[j * gx + k] > limit) friends++;
+                }
+            }
+            if (friends >= 3) obj[i] = 1;  // counts itself
+        }
+    }
+    // grow twice, the middle of a car is flat so it never gets a vector
+    vector<char> grown = obj;
+    for (int ring = 0; ring < 2; ring++) {
+        vector<char> before = grown;
+        for (int by = 0; by < gy; by++) {
+            for (int bx = 0; bx < gx; bx++) {
+                if (!before[by * gx + bx]) continue;
+                for (int j = max(0, by - 1); j <= min(gy - 1, by + 1); j++) {
+                    for (int k = max(0, bx - 1); k <= min(gx - 1, bx + 1); k++) {
+                        grown[j * gx + k] = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // move the background guess along with the camera
+    // compare with the empty world and not the last frame. the spot an object just
+    // left changed too and would get redrawn with road
+    for (int y = 0; y < h; y++) {
+        float yb = y / (float)BLOCK;
+        for (int x = 0; x < w; x++) {
+            float xb = x / (float)BLOCK;
+            int qx = x + (int)floor(ax * xb + bx_ * yb + cx_ + 0.5f);
+            int qy = y + (int)floor(ay * xb + by_ * yb + cy_ + 0.5f);
+            if (qx < 0) qx = 0;
+            if (qx >= w) qx = w - 1;
+            if (qy < 0) qy = 0;
+            if (qy >= h) qy = h - 1;
+            hom_ref_tmp[y * w + x] = hom_ref[qy * w + qx];
+        }
+    }
+    if (a.cut) memcpy(hom_ref_tmp, luma, w * h);  // new world, nothing to compare with
+
+    // draw the objects into the buffer that never clears
+    // pixel by pixel so you get the outline of the car and not a square
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            int i = y * w + x;
+            int gb = (y / BLOCK) * gx + x / BLOCK;
+            bool in_grown = y / BLOCK < gy && x / BLOCK < gx && grown[gb];
+            int diff = abs(luma[i] - hom_ref_tmp[i]);
+
+            if (in_grown && diff > 18) {
+                hom_buf[i*3] = data[i*3];
+                hom_buf[i*3+1] = data[i*3+1];
+                hom_buf[i*3+2] = data[i*3+2];
+                // object stays out of the background guess. almost, or a
+                // car that parks would count as moving forever
+                hom_ref[i] = (hom_ref_tmp[i] * 99 + luma[i]) / 100;
+            } else {
+                hom_ref[i] = (hom_ref_tmp[i] * 4 + luma[i]) / 5;
+            }
+        }
+    }
+
+    // clearing
+    // more slider = world stays stale for longer. clears land on kicks
+    float hold = 0.1f + amount * amount * 6.0f;
+    for (int i = 0; i < cw * ch; i++) {
+        hom_age[i] += dt;
+        bool clear = false;
+        if (a.kick && hom_age[i] > hold * (0.8f + 0.4f * rnd(&hom_seed))) clear = true;
+        if (hom_age[i] > hold * 2.0f) clear = true;  // no kicks around, cant wait forever
+        if (!clear) continue;
+
+        hom_age[i] = 0;
+        int x0 = (i % cw) * chunk, y0 = (i / cw) * chunk;
+        for (int y = y0; y < y0 + chunk && y < h; y++) {
+            int len = chunk;
+            if (x0 + len > w) len = w - x0;
+            if (len > 0) memcpy(hom_buf + (y * w + x0) * 3, data + (y * w + x0) * 3, len * 3);
+        }
+    }
+
 }

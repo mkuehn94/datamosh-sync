@@ -112,7 +112,8 @@ int main(int argc, char** argv) {
         0.2f,   // spectral
         0.1f,   // groove
         0.12f,  // texswap
-        0.1f    // recursion
+        0.1f,   // recursion
+        0.25f   // hall of mirrors
     };
 
     // optional params via extra args: <glitch> <jpeg> <mblur> <color> <shuffle> <beatsync>
@@ -139,6 +140,7 @@ int main(int argc, char** argv) {
         params.texswap   = parse_arg(argv[14]);
         params.recursion = parse_arg(argv[15]);
     }
+    if (argc >= 17) params.hom = parse_arg(argv[16]);
 
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {

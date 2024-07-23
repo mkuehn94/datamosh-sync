@@ -350,6 +350,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     warp->texture_swap(frame_data, params.texswap, af);
     warp->spectral_lag(frame_data, params.spectral, af);
     warp->time_quake(frame_data, params.quake, af);
+    warp->hall_of_mirrors(frame_data, params.hom, af);
 
     // stash this frame in history for future echoes
     // TODO: this eats RAM like crazy on big videos, whatever
@@ -492,7 +493,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     cout << "rot: " << params.rot << "  warp: " << params.warp
          << "  quake: " << params.quake << "  spectral: " << params.spectral << endl;
     cout << "groove: " << params.groove << "  texswap: " << params.texswap
-         << "  recursion: " << params.recursion << endl;
+         << "  recursion: " << params.recursion << "  hom: " << params.hom << endl;
 
     int width = video->get_width();
     int height = video->get_height();

@@ -34,16 +34,17 @@ GtkWidget* slider_spectral;
 GtkWidget* slider_groove;
 GtkWidget* slider_texswap;
 GtkWidget* slider_recursion;
+GtkWidget* slider_hom;
 
 GtkWidget* btn_process;
 
 static void run_processing(const char* input, float glitch, float jpeg,
                             float mblur, float color, float shuffle, float beatsync,
                             float rot, float warp, float quake, float spectral,
-                            float groove, float texswap, float recursion) {
+                            float groove, float texswap, float recursion, float hom) {
     char s_glitch[16], s_jpeg[16], s_mblur[16], s_color[16], s_shuffle[16], s_beatsync[16];
     char s_rot[16], s_warp[16], s_quake[16], s_spectral[16];
-    char s_groove[16], s_texswap[16], s_recursion[16];
+    char s_groove[16], s_texswap[16], s_recursion[16], s_hom[16];
     // NOT snprintf. gtk_init sets the locale, so on a german system %.3f
     // gives "0,500" and the backend's atof reads that as 0. every slider
     // did nothing until it hit exactly 1,000
@@ -60,6 +61,7 @@ static void run_processing(const char* input, float glitch, float jpeg,
     g_ascii_formatd(s_groove, sizeof(s_groove), "%.3f", groove);
     g_ascii_formatd(s_texswap, sizeof(s_texswap), "%.3f", texswap);
     g_ascii_formatd(s_recursion, sizeof(s_recursion), "%.3f", recursion);
+    g_ascii_formatd(s_hom, sizeof(s_hom), "%.3f", hom);
 
     pid_t pid = fork();
     if (pid == 0) {
@@ -68,7 +70,7 @@ static void run_processing(const char* input, float glitch, float jpeg,
                "",         // no separate audio
                s_glitch, s_jpeg, s_mblur, s_color, s_shuffle, s_beatsync,
                s_rot, s_warp, s_quake, s_spectral,
-               s_groove, s_texswap, s_recursion,
+               s_groove, s_texswap, s_recursion, s_hom,
                (char*)nullptr);
         exit(1);
     }
@@ -96,6 +98,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
     float groove   = gtk_range_get_value(GTK_RANGE(slider_groove));
     float texswap  = gtk_range_get_value(GTK_RANGE(slider_texswap));
     float recursion = gtk_range_get_value(GTK_RANGE(slider_recursion));
+    float hom = gtk_range_get_value(GTK_RANGE(slider_hom));
 
     gtk_label_set_text(GTK_LABEL(label_status), "processing... (check terminal)");
     gtk_widget_set_sensitive(btn_process, FALSE);
@@ -106,7 +109,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
 
     run_processing(input, glitch, jpeg, mblur, color, shuffle, beatsync,
                    rot, warp, quake, spectral,
-                   groove, texswap, recursion);
+                   groove, texswap, recursion, hom);
 
     gtk_label_set_text(GTK_LABEL(label_status), "done! check for *_munched.mp4");
     gtk_widget_set_sensitive(btn_process, TRUE);
@@ -158,7 +161,7 @@ int main(int argc, char** argv) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "datamosh-sync 0.3");
-    gtk_window_set_default_size(GTK_WINDOW(window), 480, 900);
+    gtk_window_set_default_size(GTK_WINDOW(window), 480, 950);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
@@ -199,6 +202,7 @@ int main(int argc, char** argv) {
     slider_groove   = make_slider(sliders_box, "MOTION SAMPLER (loops the motion of a bar)", 0.0, 1.0, 0.1, 0.01);
     slider_texswap  = make_slider(sliders_box, "TEXTURE SWAP (road wearing a house)",  0.0, 1.0, 0.12, 0.01);
     slider_recursion = make_slider(sliders_box, "RECURSION (frames inside frames)",    0.0, 1.0, 0.1, 0.01);
+    slider_hom = make_slider(sliders_box, "HALL OF MIRRORS (noclip, how long the screen stays dirty)", 0.0, 1.0, 0.25, 0.01);
 
     // --- separator ---
     gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
