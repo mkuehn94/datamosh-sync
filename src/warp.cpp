@@ -1184,4 +1184,5 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         }
     }
 
+    memcpy(data, hom_buf, size);
 }
