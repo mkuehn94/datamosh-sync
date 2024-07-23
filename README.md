@@ -76,7 +76,162 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 ./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0 0 0 0 0 0 0 0.6
 ```
 
-NOTE dont put everything up high at once, its just grey noise. pick 2 or 3
+## what it looks like
+
+every effect alone at max, everything else off. 3 random 5 sec clips from a drone video,
+screenshot is the last frame of the clip unless it says otherwise. full size is 1440x1080, these are shrunk
+
+### nothing on, for comparison
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![nothing on, for comparison 1](docs/effects/off_1.jpg) | ![nothing on, for comparison 2](docs/effects/off_2.jpg) | ![nothing on, for comparison 3](docs/effects/off_3.jpg) |
+
+### ROT
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 1 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![ROT 1](docs/effects/rot_1.jpg) | ![ROT 2](docs/effects/rot_2.jpg) | ![ROT 3](docs/effects/rot_3.jpg) |
+
+### WARP
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 1 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![WARP 1](docs/effects/warp_1.jpg) | ![WARP 2](docs/effects/warp_2.jpg) | ![WARP 3](docs/effects/warp_3.jpg) |
+
+### TIME QUAKE
+
+look at the block edges, cars and trees dont line up
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 1 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![TIME QUAKE 1](docs/effects/quake_1.jpg) | ![TIME QUAKE 2](docs/effects/quake_2.jpg) | ![TIME QUAKE 3](docs/effects/quake_3.jpg) |
+
+### SPECTRAL LAG
+
+subtle in a still, look at the edges
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 1 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![SPECTRAL LAG 1](docs/effects/spectral_1.jpg) | ![SPECTRAL LAG 2](docs/effects/spectral_2.jpg) | ![SPECTRAL LAG 3](docs/effects/spectral_3.jpg) |
+
+### MOTION SAMPLER
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 1 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![MOTION SAMPLER 1](docs/effects/groove_1.jpg) | ![MOTION SAMPLER 2](docs/effects/groove_2.jpg) | ![MOTION SAMPLER 3](docs/effects/groove_3.jpg) |
+
+### TEXTURE SWAP
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 1 0 0
+```
+
+| | | |
+|---|---|---|
+| ![TEXTURE SWAP 1](docs/effects/texswap_1.jpg) | ![TEXTURE SWAP 2](docs/effects/texswap_2.jpg) | ![TEXTURE SWAP 3](docs/effects/texswap_3.jpg) |
+
+### RECURSION
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 1 0
+```
+
+| | | |
+|---|---|---|
+| ![RECURSION 1](docs/effects/recursion_1.jpg) | ![RECURSION 2](docs/effects/recursion_2.jpg) | ![RECURSION 3](docs/effects/recursion_3.jpg) |
+
+### HALL OF MIRRORS
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 0 1
+```
+
+| | | |
+|---|---|---|
+| ![HALL OF MIRRORS 1](docs/effects/hom_1.jpg) | ![HALL OF MIRRORS 2](docs/effects/hom_2.jpg) | ![HALL OF MIRRORS 3](docs/effects/hom_3.jpg) |
+
+### motion blur / trails
+
+```
+./datamosh-sync video.mp4 "" 0 100 1 0 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![motion blur / trails 1](docs/effects/blur_1.jpg) | ![motion blur / trails 2](docs/effects/blur_2.jpg) | ![motion blur / trails 3](docs/effects/blur_3.jpg) |
+
+### THE VOID
+
+void depth 1 + void tolerance 0. tolerance does nothing by itself. *worst frame of the clip*, not the end one
+
+```
+./datamosh-sync video.mp4 "" 0 0 0 1 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![THE VOID 1](docs/effects/void_1.jpg) | ![THE VOID 2](docs/effects/void_2.jpg) | ![THE VOID 3](docs/effects/void_3.jpg) |
+
+### stuck overlay
+
+glitch has to be on or nothing ever gets stuck, so glitch is at .5 here
+
+```
+./datamosh-sync video.mp4 "" 0.5 100 0 0 1 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![stuck overlay 1](docs/effects/stuck_1.jpg) | ![stuck overlay 2](docs/effects/stuck_2.jpg) | ![stuck overlay 3](docs/effects/stuck_3.jpg) |
+
+### glitch
+
+only hits on loud parts, the patches are the stuck overlay it also triggers. *worst frame of the clip*, not the end one
+
+```
+./datamosh-sync video.mp4 "" 1 100 0 0 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![glitch 1](docs/effects/glitch_1.jpg) | ![glitch 2](docs/effects/glitch_2.jpg) | ![glitch 3](docs/effects/glitch_3.jpg) |
+
+### beat sync
+
+honestly you cant see this one in a still, its a zoom punch + freeze on the beat. *worst frame of the clip*, not the end one
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 1 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![beat sync 1](docs/effects/beatsync_1.jpg) | ![beat sync 2](docs/effects/beatsync_2.jpg) | ![beat sync 3](docs/effects/beatsync_3.jpg) |
 
 old effects list:
 - motion vector glitching
