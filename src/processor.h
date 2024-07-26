@@ -6,6 +6,7 @@
 #include "effects.h"
 #include "constants.h"
 #include "warp.h"
+#include "arrange.h"
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@ struct ProcessParams {
     float texswap;   // blocks wearing the texture of other blocks
     float recursion; // tiny copies of the frame inside the frame
     float hom;       // hall of mirrors, the noclip screen that never clears
+    float parts[FX_COUNT];  // how much of the song every effect plays, 1 = always
 };
 
 class VideoMosher {
@@ -38,6 +40,7 @@ public:
 private:
     // returns true if this frame landed on a beat
     bool process_frame(uint8_t* frame_data, int width, int height, float time);
+    void play_section(float time);  // which effects are on right now
     bool setup_encoder(const std::string& output_path, int width, int height, AVRational rate);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
@@ -53,7 +56,13 @@ private:
     WarpEngine* warp;
     bool last_on_beat;
 
-    ProcessParams params;
+    ProcessParams params;       // what the effects read, gets zeroed when out of a section
+    ProcessParams slider_params;  // what the user actually set
+    std::vector<Section> sections;
+    bool use_parts;
+    bool fx_was_on[FX_COUNT];
+    bool stuck_allowed;
+    std::string source_path;
     std::vector<float> beat_times;
     int current_frame;
     float fps;            // of the source, NOT always 30

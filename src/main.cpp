@@ -9,6 +9,7 @@
 #include "video_processor.h"
 #include "audio_analyzer.h"
 #include "processor.h"
+#include "song_sections.h"
 
 using namespace std;
 
@@ -63,6 +64,16 @@ int main(int argc, char** argv) {
         cerr << "Usage: " << argv[0] << " <video> [audio]" << endl;
         cerr << "  If audio is omitted, will try to extract from video" << endl;
         return 1;
+    }
+
+    // the gui asks for this to draw the track, doesnt render anything
+    if (string(argv[1]) == "--sections") {
+        if (argc < 3) return 1;
+        AudioAnalyzer song;
+        if (!song.load_from_video(argv[2])) return 1;
+        song.analyze();
+        print_sections(cut_song(&song, argv[2]));
+        return 0;
     }
 
     string video_path = argv[1];
@@ -141,6 +152,16 @@ int main(int argc, char** argv) {
         params.recursion = parse_arg(argv[15]);
     }
     if (argc >= 17) params.hom = parse_arg(argv[16]);
+
+    // and the parts sliders, same order as enum Fx. they start at 1 = always on
+    // <glitch> <blur> <void> <stuck> <beatsync> <rot> <warp> <quake> <spectral>
+    // <groove> <texswap> <recursion> <hom>
+    for (int i = 0; i < FX_COUNT; i++) {
+        params.parts[i] = 1.0f;
+        if (argc > 17 + i) params.parts[i] = parse_arg(argv[17 + i]);
+        if (params.parts[i] < 0) params.parts[i] = 0;
+        if (params.parts[i] > 1) params.parts[i] = 1;
+    }
 
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {

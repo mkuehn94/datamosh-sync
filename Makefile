@@ -14,7 +14,8 @@ GUI_TARGET = datamosh-gui
 
 CORE_SOURCES = $(SRCDIR)/main.cpp $(SRCDIR)/video_processor.cpp \
                $(SRCDIR)/audio_analyzer.cpp $(SRCDIR)/effects.cpp \
-               $(SRCDIR)/processor.cpp $(SRCDIR)/warp.cpp
+               $(SRCDIR)/processor.cpp $(SRCDIR)/warp.cpp \
+               $(SRCDIR)/arrange.cpp $(SRCDIR)/song_sections.cpp
 
 CORE_OBJECTS = $(CORE_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 

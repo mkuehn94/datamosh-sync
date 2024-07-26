@@ -38,6 +38,7 @@ WarpEngine::WarpEngine() {
     refresh_x = refresh_y = 0;
     kicks_since_refresh = 0;
     ring_pos = ring_count = 0;
+    quake_tape = false;
     coef_ready = false;
     spectral_flip = false;
     spectral_kicks = 0;
@@ -329,6 +330,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
     if (rot < 0.01f && warp < 0.01f && groove < 0.01f) {
         memcpy(prev_src, data, size);
+        canvas_ready = false;  // next time it starts rotting from the picture of THAT moment
         return;
     }
 
@@ -508,7 +510,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 // blur
 
 void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
-    if (amount < 0.01f) return;
+    if (amount < 0.01f && !quake_tape) return;
 
     int size = w * h * 3;
     int cap = (int)(QUAKE_SECONDS * fps);
@@ -524,6 +526,10 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     int now = ring_pos;
     ring_pos = (ring_pos + 1) % cap;
     if (ring_count < cap) ring_count++;
+
+    // only here to keep the tape running. otherwise a quake that starts on a
+    // drop has no past to throw anything into for the first seconds
+    if (amount < 0.01f) return;
 
     // low slider = only the hardest kicks make a ring at all
     float kick_roll = rnd(&quake_seed);
@@ -1185,4 +1191,32 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
     }
 
     memcpy(data, hom_buf, size);
+}
+
+// ===== coming back after a section off =====
+
+void WarpEngine::wake_quake() {
+    // ring_pos = 0;
+    // ring_count = 0;
+    rings.clear();
+    depth.assign(gx * gy, 0);
+}
+
+void WarpEngine::wake_spectral() {
+    coef_ready = false;
+}
+
+void WarpEngine::wake_recursion() {
+    cells.clear();
+    free(recur_prev);
+    recur_prev = nullptr;
+}
+
+void WarpEngine::wake_mirrors() {
+    free(hom_buf);
+    free(hom_ref);
+    free(hom_ref_tmp);
+    hom_buf = nullptr;
+    hom_ref = nullptr;
+    hom_ref_tmp = nullptr;
 }

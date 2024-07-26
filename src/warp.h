@@ -35,6 +35,14 @@ public:
     void time_quake(uint8_t* data, float amount, const AudioFrame& a);
     void spectral_lag(uint8_t* data, float amount, const AudioFrame& a);
 
+    // effect comes back after its section was off. these keep old pictures
+    // around and they would be from a minute ago
+    void keep_quake_tape() { quake_tape = true; }  // keeps recording while its off
+    void wake_quake();
+    void wake_spectral();
+    void wake_recursion();
+    void wake_mirrors();
+
 private:
     // gravity well = a spot where the motion vectors go wrong
     struct Well {
@@ -79,6 +87,7 @@ private:
 
     // quake
     std::vector<uint8_t*> ring_frames;
+    bool quake_tape;
     int ring_pos, ring_count;
     std::vector<float> depth;            // seconds behind the present, per block
     std::vector<Ring> rings;

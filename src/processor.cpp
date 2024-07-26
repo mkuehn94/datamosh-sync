@@ -3,6 +3,7 @@
 
 #include "processor.h"
 #include "constants.h"
+#include "song_sections.h"
 #include <iostream>
 #include <cmath>
 
@@ -53,6 +54,9 @@ VideoMosher::VideoMosher() {
     stuck_buf = nullptr;
     stuck_x = stuck_y = stuck_w = stuck_h = 0;
     stuck_timer = 0;
+    use_parts = false;
+    stuck_allowed = true;
+    for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = true;
     void_r = void_g = void_b = 0.0f;
     void_color_init = false;
     void_off_x = 0;
@@ -77,6 +81,7 @@ VideoMosher::~VideoMosher() {
 
 bool VideoMosher::init(const string& video_path, const string& audio_path) {
     // input_video_path = video_path;  // save for audio copy later
+    source_path = video_path;
 
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
@@ -103,6 +108,7 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
 
 bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     // input_video_path = video_path;  // save for audio copy later
+    source_path = video_path;
 
     cout << "[debug] creating objects..." << endl;
     video = new VideoProcessor();
@@ -132,7 +138,72 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     return true;
 }
 
+// out of its section an effect just gets slider 0 for that frame. all the
+// effects already know what to do with 0 so nothing below had to change
+void VideoMosher::play_section(float time) {
+    const Section* s = section_at(sections, time);
+    if (!s) return;
+
+    params = slider_params;
+
+    // build gets worse and worse, breath is almost nothing, etc
+    float hard = hardness_at(*s, time);
+    params.glitch_intensity *= hard;
+    params.motion_blur *= hard;
+    params.color_shift *= hard;
+    params.beat_sync *= hard;
+    params.rot *= hard;
+    params.warp *= hard;
+    params.quake *= hard;
+    params.spectral *= hard;
+    params.groove *= hard;
+    params.texswap *= hard;
+    params.recursion *= hard;
+    params.hom *= hard;
+
+    // and on top of that per effect, the ones too violent for this moment
+    params.glitch_intensity *= s->fx_scale[FX_GLITCH];
+    params.motion_blur *= s->fx_scale[FX_BLUR];
+    params.color_shift *= s->fx_scale[FX_VOID];
+    params.beat_sync *= s->fx_scale[FX_BEATSYNC];
+    params.rot *= s->fx_scale[FX_ROT];
+    params.warp *= s->fx_scale[FX_WARP];
+    params.quake *= s->fx_scale[FX_QUAKE];
+    params.spectral *= s->fx_scale[FX_SPECTRAL];
+    params.groove *= s->fx_scale[FX_GROOVE];
+    params.texswap *= s->fx_scale[FX_TEXSWAP];
+    params.recursion *= s->fx_scale[FX_RECURSION];
+    params.hom *= s->fx_scale[FX_HOM];
+
+    if (!s->on[FX_GLITCH]) params.glitch_intensity = 0;
+    if (!s->on[FX_BLUR]) params.motion_blur = 0;
+    if (!s->on[FX_VOID]) params.color_shift = 0;
+    if (!s->on[FX_BEATSYNC]) params.beat_sync = 0;
+    if (!s->on[FX_ROT]) params.rot = 0;
+    if (!s->on[FX_WARP]) params.warp = 0;
+    if (!s->on[FX_QUAKE]) params.quake = 0;
+    if (!s->on[FX_SPECTRAL]) params.spectral = 0;
+    if (!s->on[FX_GROOVE]) params.groove = 0;
+    if (!s->on[FX_TEXSWAP]) params.texswap = 0;
+    if (!s->on[FX_RECURSION]) params.recursion = 0;
+    if (!s->on[FX_HOM]) params.hom = 0;
+
+    stuck_allowed = s->on[FX_STUCK];
+    if (!stuck_allowed) stuck_timer = 0;  // stuck patch shouldnt outlive its section
+
+    // starts again fresh, or you get a flash of a street from a minute ago
+    if (s->on[FX_QUAKE] && !fx_was_on[FX_QUAKE]) warp->wake_quake();
+    if (s->on[FX_SPECTRAL] && !fx_was_on[FX_SPECTRAL]) warp->wake_spectral();
+    if (s->on[FX_RECURSION] && !fx_was_on[FX_RECURSION]) warp->wake_recursion();
+    if (s->on[FX_HOM] && !fx_was_on[FX_HOM]) warp->wake_mirrors();
+    if (s->on[FX_BLUR] && !fx_was_on[FX_BLUR] && ghost_buf) memset(ghost_buf, 0, ghost_buf_size);
+
+    for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = s->on[i];
+}
+
 bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
+    if (use_parts) play_section(time);
+
     bool on_beat = false;
     float beat_strength = 0.0;
 
@@ -367,9 +438,9 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         effects->paste_rect(frame_data, width, height, stuck_buf,
                             stuck_x, stuck_y, stuck_w, stuck_h);
         stuck_timer--;
-    } else if (on_beat && energy > 0.55f &&
-               (rand() % 100) < (int)(params.glitch_intensity * 35) &&
-               params.glitch_intensity > 0.05f) {
+    } else if (on_beat && stuck_allowed && energy > 0.55f &&
+               (rand() % 100) < (int)(slider_params.glitch_intensity * 35) &&
+               slider_params.glitch_intensity > 0.05f) {
         // grab a chunk and freeze it for 1-4 seconds. block aligned so
         // the encoder treats it as truly static = cheapest P-frames ever
         stuck_w = MACROBLOCK_SIZE * (6 + rand() % 14);
@@ -482,6 +553,25 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
 
 bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     params = p;
+    slider_params = p;
+
+    // only bother listening to the whole song if someone moved a parts slider
+    float amounts[FX_COUNT] = {
+        p.glitch_intensity, p.motion_blur, p.color_shift, p.glitch_intensity, p.beat_sync,
+        p.rot, p.warp, p.quake, p.spectral, p.groove,
+        p.texswap, p.recursion, p.hom
+    };
+    bool used[FX_COUNT];
+    for (int i = 0; i < FX_COUNT; i++) {
+        used[i] = amounts[i] > 0.01f;
+        if (used[i] && p.parts[i] < 0.995f) use_parts = true;
+    }
+    if (use_parts) {
+        sections = cut_song(audio, source_path);
+        assign_parts(sections, p.parts, used, amounts, p.jpeg_quality);
+        print_track(sections);
+        if (used[FX_QUAKE]) warp->keep_quake_tape();
+    }
 
     cout << "processing video..." << endl;
     cout << "glitch: " << params.glitch_intensity << endl;
