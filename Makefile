@@ -29,7 +29,7 @@ $(GUI_TARGET): $(OBJDIR)/gui_main.o
 	$(CC) $(OBJDIR)/gui_main.o -o $(GUI_TARGET) $(GTK_LDFLAGS)
 	@echo "Built $(GUI_TARGET)"
 
-$(OBJDIR)/gui_main.o: $(SRCDIR)/gui_main.cpp
+$(OBJDIR)/gui_main.o: $(SRCDIR)/gui_main.cpp $(SRCDIR)/arrange.h
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -c $< -o $@
 
