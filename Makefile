@@ -25,8 +25,8 @@ $(TARGET): $(CORE_OBJECTS)
 	$(CC) $(CORE_OBJECTS) -o $(TARGET) $(LDFLAGS)
 	@echo "Built $(TARGET)"
 
-$(GUI_TARGET): $(OBJDIR)/gui_main.o
-	$(CC) $(OBJDIR)/gui_main.o -o $(GUI_TARGET) $(GTK_LDFLAGS)
+$(GUI_TARGET): $(OBJDIR)/gui_main.o $(OBJDIR)/arrange.o
+	$(CC) $(OBJDIR)/gui_main.o $(OBJDIR)/arrange.o -o $(GUI_TARGET) $(GTK_LDFLAGS)
 	@echo "Built $(GUI_TARGET)"
 
 $(OBJDIR)/gui_main.o: $(SRCDIR)/gui_main.cpp $(SRCDIR)/arrange.h
