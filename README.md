@@ -74,7 +74,89 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 ./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0.3 0.2 0.15 0 0 0.7 0.35 0
 # noclip, cars pile up behind themselves
 ./datamosh-sync video.mp4 "" 0 100 0 0 0 0.3 0 0 0 0 0 0 0 0.6
+# arranged: everything up high but only in its own parts of the song
+./datamosh-sync video.mp4 "" 0.5 65 0.5 0.5 0.5 0.7 0.8 0.6 0.7 0.6 0.5 0.6 0.5 0.6  0.25 0.2 0.2 0.15 0.3 0.3 0.2 0.25 0.2 0.2 0.15 0.15 0.25
 ```
+
+## parts of the song
+
+every effect has a second slider, how much of the song it plays. 1 = the whole
+time, .3 = about 30%. so you can turn things up high and they dont all pile up,
+it plays more like a track than effects on top of each other
+
+![the track](docs/track.png)
+
+how it decides:
+
+- cuts the song where it starts sounding different (4 sec before vs 4 sec
+  after) and at hard cuts in the video. everything lands on a beat. parts
+  longer than 6 sec get chopped
+- every effect has a taste, see the table in src/arrange.cpp. warp wants bass
+  and movement, spectral wants quiet and airy, recursion wants kick drums.
+  done by ear, change it if you hear it different
+- pickiest effect chooses first, sections that are already full count against
+  it so stuff spreads out. same settings = same track every time
+
+it also guesses the big picture of the song from a slow "tension" curve (loud +
+bright + busy + bass):
+
+- lead-in: everything before the first big moment. quiet doesnt mean nothing
+  happens, smooth effects only (rot, spectral, mirrors, sampler, blur) and it
+  slowly gets more. the sharp ones wait for the drop
+- build: tension keeps climbing for 8+ sec. "how hard" ramps up from 35% to the
+  full slider so it gets worse and worse
+- drop: loud + bass jump out of nowhere. right before it the picture goes almost
+  clean for a second, then the big effects come in together
+- breakdown: was loud, now clearly isnt. calm effects like rot and blur get it
+- climax: strongest 16 sec of the song, later counts a bit more. only place where
+  stacking effects is encouraged. after that it falls apart slowly
+- same loop all the way through = no moments, it says so in the terminal
+
+how violent every effect is counts too, combined with its how hard slider. quake
+at .25 is already rougher than texture swap at .5, glitch at 1 is still harmless.
+those numbers got measured, every effect alone at 4 strengths on 3 clips (table in
+src/arrange.cpp, half "how wrecked is the picture", half "how hard does it jump
+between frames"). then:
+
+- every section gets a target for how violent it should be, from the music. it
+  gets scaled to what your sliders can pay for
+- sections get swapped between effects until it gets close to those targets
+- effect way too violent for its moment gets turned down, slider is the ceiling
+- two effects dont add up, the picture can only get so wrecked. but no single
+  effect can fill a section alone, or quake takes the whole climax by itself
+
+on the track: brighter block = more violent right there
+
+its all guesses from loudness and brightness. no idea about melody or vocals. the
+strip on top of the track shows what it thinks, white line = how hard right now
+
+in the gui: set how much of the song every effect gets, hit CALCULATE TRACK and
+then the track shows up. move a slider and its gone until you calculate again
+(only the first time for a video takes a while). MOSH IT calculates by itself if
+you didnt. while it renders a red line goes along and the names of whats playing
+go yellow
+
+on the command line they go after the other 14, same order as above but without
+void_tol:
+
+```
+<glitch> <blur> <void> <stuck> <beatsync> <rot> <warp> <quake> <spectral> <groove> <texswap> <recursion> <hom>
+```
+
+all of them left out or at 1 = same output as before, it doesnt even listen for
+sections and no build/drop stuff happens. the terminal prints the track too
+
+NOTE
+- percent is only roughly, it can only take whole sections. the smallest ones
+  are 2-6 sec so on a 90 sec song .01 is really more like 3-6%
+- effect starts fresh every time its section starts. rot builds slowly so in
+  a 4 sec section it barely gets going, turn it up or give it more parts
+- climax and drops eat a lot of the percent, so the parts in between can get
+  pretty empty. give things more parts if thats too clean for you
+- a slider at 1 keeps its section all the time but still follows the how hard
+  ramp, also in the breath before a drop
+
+NOTE dont put everything up high at once, its just grey noise. pick 2 or 3
 
 ## what it looks like
 
