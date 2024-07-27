@@ -452,8 +452,12 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // other effects do behind it. history above stores the UNstuck frame
     // so lag/echo dont get confused by the patch
     if (stuck_timer > 0) {
-        effects->paste_rect(frame_data, width, height, stuck_buf,
-                            stuck_x, stuck_y, stuck_w, stuck_h);
+        // full overwrite, no blending. its STUCK, not translucent
+        for (int y = 0; y < stuck_h; y++) {
+            if (stuck_y + y >= height) break;
+            memcpy(&frame_data[((stuck_y + y) * width + stuck_x) * 3],
+                   &stuck_buf[y * stuck_w * 3], stuck_w * 3);
+        }
         // patch only lets go on a beat. waits 2 sec max or a quiet part keeps it forever
         if (stuck_timer == 1 && !on_beat && stuck_wait < fps * 2) {
             stuck_wait++;

@@ -73,11 +73,10 @@ public:
 
     // stuck overlay - the classic broken-stream artifact. grab a rect,
     // freeze it, paste it over the live video while everything behind
-    // it keeps moving. grab once, paste every frame, then release
+    // it keeps moving. grab once, paste every frame, then release.
+    // the paste half is inlined in the process loop, dont go looking for it
     void grab_rect(uint8_t* data, int width, int height,
                    uint8_t* out, int rx, int ry, int rw, int rh);
-    void paste_rect(uint8_t* data, int width, int height,
-                    uint8_t* patch, int rx, int ry, int rw, int rh);
 
     // VOID - every pixel matching a color gets replaced by a chunk of
     // the same frame from somewhere else. holes into the wrong reality

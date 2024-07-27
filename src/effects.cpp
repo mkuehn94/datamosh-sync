@@ -616,15 +616,6 @@ void EffectEngine::grab_rect(uint8_t* data, int width, int height,
     }
 }
 
-void EffectEngine::paste_rect(uint8_t* data, int width, int height,
-                              uint8_t* patch, int rx, int ry, int rw, int rh) {
-    // full overwrite, no blending. its STUCK, not translucent
-    for (int y = 0; y < rh; y++) {
-        if (ry + y >= height) break;
-        memcpy(&data[((ry + y) * width + rx) * 3], &patch[y * rw * 3], rw * 3);
-    }
-}
-
 // ========= VOID =========
 // match a color, delete it, and let something else show through the hole -
 // specifically another part of the same frame, displaced. the sky becomes
