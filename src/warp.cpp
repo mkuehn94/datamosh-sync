@@ -39,6 +39,7 @@ WarpEngine::WarpEngine() {
     kicks_since_refresh = 0;
     ring_pos = ring_count = 0;
     quake_tape = false;
+    quake_levels = 3;
     coef_ready = false;
     spectral_flip = false;
     spectral_kicks = 0;
@@ -557,7 +558,10 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     // the past catches up. more quake = time stays broken for longer
     float catch_up = pow(0.5f, dt / (0.05f + 1.05f * amount));
     float sink = amount * amount * 0.5f * dt;
-    int levels = 3 + (int)(a.treble * 3);   // hats make the sheets finer
+    // hats make the sheets finer. only on the kick, every frame it makes all the
+    // blocks jump to a different moment
+    if (a.kick) quake_levels = 3 + (int)(a.treble * 3);
+    int levels = quake_levels;
 
     vector<float> ox(gx * gy, 0.0f), oy(gx * gy, 0.0f), depth2(gx * gy);
 

@@ -89,6 +89,7 @@ private:
     // quake
     std::vector<uint8_t*> ring_frames;
     bool quake_tape;
+    int quake_levels;
     int ring_pos, ring_count;
     std::vector<float> depth;            // seconds behind the present, per block
     std::vector<Ring> rings;
