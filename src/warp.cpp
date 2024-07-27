@@ -51,6 +51,7 @@ WarpEngine::WarpEngine() {
     loop_pos = 0;
     loop_slice = 0;
     bar_no = 0;
+    groove_punch = 0;
     recur_prev = nullptr;
     hom_buf = nullptr;
     hom_ref = nullptr;
@@ -277,6 +278,12 @@ void WarpEngine::start_refresh() {
 // jumps to the next slice of the loop so it stays locked to the music
 
 void WarpEngine::update_sampler(const AudioFrame& a) {
+    // the taped vectors alone dont do anything you can see on a kick, its just
+    // 1 or 2 px of different motion. so the taped chunks lurch on the hit and
+    // go slack in between
+    if (a.kick) groove_punch = 0.4f + 0.6f * a.hit;
+    else groove_punch *= pow(0.02f, dt / 0.15f);
+
     rec_x.push_back(mvx);
     rec_y.push_back(mvy);
     if (a.kick) {
@@ -396,8 +403,9 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                 unsigned hh = ((unsigned)(by / 4) * 73856093u) ^ ((unsigned)(bx / 4) * 19349663u) ^ ((unsigned)bar_no * 83492791u);
                 hh = hh * 2654435761u;
                 if ((hh >> 16) / 65536.0f < groove * 1.4f) {
-                    vx = loop_x[loop_pos][idx] + wx;
-                    vy = loop_y[loop_pos][idx] + wy;
+                    float lurch = 0.25f + 5.0f * groove_punch;
+                    vx = (int)(loop_x[loop_pos][idx] * lurch) + wx;
+                    vy = (int)(loop_y[loop_pos][idx] * lurch) + wy;
                 }
             }
 

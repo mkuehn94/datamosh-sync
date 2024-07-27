@@ -108,6 +108,7 @@ private:
     std::vector<std::vector<short> > rec_x, rec_y, loop_x, loop_y;
     std::vector<int> rec_kicks, loop_kicks;   // which frames had a kick
     int bar_kicks, loop_pos, loop_slice, bar_no;
+    float groove_punch;  // 1 right on a kick then falls off
 
     // recursion
     struct Cell {
