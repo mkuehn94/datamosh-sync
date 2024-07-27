@@ -92,6 +92,8 @@ private:
     uint8_t* stuck_buf;
     int stuck_x, stuck_y, stuck_w, stuck_h;
     int stuck_timer;                          // frames left frozen, 0 = not stuck
+    float last_treble;
+    int glitch_left;                          // frames of glitch left from the last hat
 
     // void state - the color being keyed out (smoothed, else it flickers)
     float void_r, void_g, void_b;

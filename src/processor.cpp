@@ -54,6 +54,8 @@ VideoMosher::VideoMosher() {
     stuck_buf = nullptr;
     stuck_x = stuck_y = stuck_w = stuck_h = 0;
     stuck_timer = 0;
+    last_treble = 0;
+    glitch_left = 0;
     use_parts = false;
     stuck_allowed = true;
     for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = true;
@@ -254,6 +256,11 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     af.cut = warp->scene_cut();
     last_on_beat = on_beat;
 
+    // hats + snares, treble curve jumping up. same idea as the kick but for the top end
+    bool tick = af.treble > 0.45f && af.treble > last_treble + 0.12f;
+    last_treble = af.treble;
+    if (tick) glitch_left = (int)(0.07f * fps) + 1;  // about 70ms
+
     uint8_t* prev_for_trails = (uint8_t*)malloc(frame_size);
     memcpy(prev_for_trails, prev_rgb, frame_size);
     memcpy(prev_rgb, frame_data, frame_size);
@@ -362,9 +369,10 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     // 4. glitch bands - only on real energy peaks, the ONE corruption
     // effect that survived the purge because it looks like actual
     // bitstream damage and not a snapchat filter
-    if (energy > 0.5f && params.glitch_intensity > 0.05f) {
+    // only on hats and snares, harder because its so short
+    if (glitch_left > 0 && energy > 0.2f && params.glitch_intensity > 0.05f) {
         effects->glitch_bands(frame_data, width, height,
-                              params.glitch_intensity * energy * 0.6f);
+                              params.glitch_intensity * (0.5f + energy * 0.6f));
     }
 
     // 5. pulse zoom on beats - beatsync slider scales the punch
