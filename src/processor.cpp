@@ -244,6 +244,13 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     af.bass = audio->get_bass(time);
     af.treble = audio->get_treble(time);
     af.kick = on_beat && !last_on_beat;  // on_beat stays true for a few frames
+    // the kick frame is ~50ms BEFORE the beat (the +-0.05 above) so a.bass right
+    // here is still whats left of the last hit. have to look ahead for the real one
+    af.hit = 0;
+    for (int look = 0; look < 6; look++) {
+        float b = audio->get_bass(time + look * 0.025f);
+        if (b > af.hit) af.hit = b;
+    }
     af.cut = warp->scene_cut();
     last_on_beat = on_beat;
 

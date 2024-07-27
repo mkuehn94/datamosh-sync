@@ -14,6 +14,7 @@ struct AudioFrame {
     float bass;
     float treble;
     bool kick;   // only true on the first frame of a beat
+    float hit;   // how strong that kick is. NOT the same as bass, see processor.cpp
     bool cut;    // scene changed
 };
 

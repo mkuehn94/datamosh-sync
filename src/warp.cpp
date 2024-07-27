@@ -534,13 +534,15 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     // low slider = only the hardest kicks make a ring at all
     float kick_roll = rnd(&quake_seed);
     float kick_x = rnd(&quake_seed), kick_y = rnd(&quake_seed), kick_s = rnd(&quake_seed);
-    if (a.kick && kick_roll < amount * 2.0f) {
+    // only the hard ones, every kick would be 3 rings a second
+    if (a.kick && kick_roll < amount * 2.0f && a.hit > 0.9f - 0.3f * amount) {
         Ring rg;
         rg.x = w * (0.15f + 0.7f * kick_x);
         rg.y = h * (0.15f + 0.7f * kick_y);
-        rg.r = 0;
-        rg.speed = h * (1.2f + 1.6f * kick_s);   // crosses the frame in under a sec
-        rg.strength = amount * (0.4f + 0.6f * a.bass);
+        rg.r = h * 0.25f;  // starts a bit out, r=0 means you see nothing on the actual hit
+        // gone quick so you can tell which kick made it, the sheets stay behind
+        rg.speed = h * (3.5f + 3.0f * kick_s);
+        rg.strength = amount * (0.4f + 0.6f * a.hit);
         rings.push_back(rg);
         if (rings.size() > 6) rings.erase(rings.begin());
     }
