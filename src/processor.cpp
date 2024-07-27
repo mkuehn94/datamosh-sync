@@ -54,6 +54,7 @@ VideoMosher::VideoMosher() {
     stuck_buf = nullptr;
     stuck_x = stuck_y = stuck_w = stuck_h = 0;
     stuck_timer = 0;
+    stuck_wait = 0;
     last_treble = 0;
     glitch_left = 0;
     use_parts = false;
@@ -453,7 +454,13 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     if (stuck_timer > 0) {
         effects->paste_rect(frame_data, width, height, stuck_buf,
                             stuck_x, stuck_y, stuck_w, stuck_h);
-        stuck_timer--;
+        // patch only lets go on a beat. waits 2 sec max or a quiet part keeps it forever
+        if (stuck_timer == 1 && !on_beat && stuck_wait < fps * 2) {
+            stuck_wait++;
+        } else {
+            stuck_timer--;
+            stuck_wait = 0;
+        }
     } else if (on_beat && stuck_allowed && energy > 0.55f &&
                (rand() % 100) < (int)(slider_params.glitch_intensity * 35) &&
                slider_params.glitch_intensity > 0.05f) {

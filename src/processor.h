@@ -92,6 +92,7 @@ private:
     uint8_t* stuck_buf;
     int stuck_x, stuck_y, stuck_w, stuck_h;
     int stuck_timer;                          // frames left frozen, 0 = not stuck
+    int stuck_wait;                           // frames its been waiting for a beat to let go
     float last_treble;
     int glitch_left;                          // frames of glitch left from the last hat
 
