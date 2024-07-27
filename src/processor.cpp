@@ -374,6 +374,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         effects->glitch_bands(frame_data, width, height,
                               params.glitch_intensity * (0.5f + energy * 0.6f));
     }
+    if (glitch_left > 0) glitch_left--;
 
     // 5. pulse zoom on beats - beatsync slider scales the punch
     if (on_beat && params.beat_sync > 0.05f) {
