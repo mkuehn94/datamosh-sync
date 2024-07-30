@@ -71,16 +71,16 @@ static const float taste[FX_COUNT][F_COUNT] = {
 // everything except quake sits at the bottom. 5 sec clips, so rot is a bit
 // underrated, it would get worse if it had longer
 static const float violence[FX_COUNT][5] = {
-    /* glitch    */ {0.00f, 0.08f, 0.11f, 0.13f, 0.14f},
+    /* glitch    */ {0.00f, 0.09f, 0.13f, 0.15f, 0.17f},
     /* blur      */ {0.00f, 0.07f, 0.11f, 0.14f, 0.18f},
     /* void      */ {0.00f, 0.05f, 0.07f, 0.10f, 0.13f},
     /* stuck     */ {0.13f, 0.13f, 0.13f, 0.13f, 0.13f},  // doesnt get worse with its slider, only longer
     /* beat sync */ {0.00f, 0.32f, 0.44f, 0.53f, 0.60f},
     /* rot       */ {0.00f, 0.07f, 0.13f, 0.22f, 0.32f},
     /* warp      */ {0.00f, 0.17f, 0.30f, 0.42f, 0.54f},
-    /* quake     */ {0.00f, 0.55f, 0.94f, 0.99f, 1.00f},
+    /* quake     */ {0.00f, 0.32f, 0.79f, 0.86f, 0.83f},
     /* spectral  */ {0.00f, 0.14f, 0.23f, 0.28f, 0.29f},
-    /* sampler   */ {0.00f, 0.17f, 0.29f, 0.41f, 0.44f},
+    /* sampler   */ {0.00f, 0.20f, 0.34f, 0.47f, 0.52f},
     /* texswap   */ {0.00f, 0.31f, 0.47f, 0.56f, 0.59f},
     /* recursion */ {0.00f, 0.08f, 0.15f, 0.25f, 0.44f},
     /* mirrors   */ {0.00f, 0.48f, 0.45f, 0.48f, 0.48f},
@@ -245,6 +245,11 @@ void assign_parts(vector<Section>& sections, const float* parts, const bool* use
             bool anything_goes = s.role == ROLE_DROP || s.role == ROLE_CLIMAX;
             if (!anything_goes) s.fx_scale[fx] = scale_for(fx, amounts[fx] * hard, void_tol, s.music + 0.25f);
             wants[i][fx] = aggression(fx, amounts[fx] * hard * s.fx_scale[fx], void_tol);
+            // rot needs seconds to get going. in the very first part of the video
+            // it looks like nothing happened, so it doesnt count for much there
+            if (i == 0 && fx == FX_ROT) wants[i][fx] *= 0.35f;
+            // same for the sampler, tape is empty until it recorded a whole bar
+            if (i == 0 && fx == FX_GROOVE) wants[i][fx] *= 0.1f;
         }
     }
 

@@ -361,7 +361,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         if (!now) continue;
         float f = (t - now->start) / (now->end - now->start);
         if (now->role == ROLE_BUILD) hard[i] = 0.35f + 0.65f * f;  // gets worse and worse
-        if (now->role == ROLE_LEADIN) hard[i] = 0.6f + 0.4f * f;
+        if (now->role == ROLE_LEADIN) hard[i] = 0.75f + 0.25f * f;
         if (now->role == ROLE_BREAKDOWN) hard[i] = 0.5f;
         if (now->role == ROLE_CLIMAX || now->role == ROLE_DROP) hard[i] = 1.0f;
         if (now->role == ROLE_BREATH) hard[i] = 0.1f;
