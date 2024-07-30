@@ -73,6 +73,10 @@ int main(int argc, char** argv) {
         if (!song.load_from_video(argv[2])) return 1;
         song.analyze();
         print_sections(cut_song(&song, argv[2]));
+        // quarter sec is plenty for drawing it
+        vector<float> z = intensity_curve(&song);
+        for (size_t i = 0; i < z.size(); i += 5) printf("SWING %.3f\n", z[i]);
+        fflush(stdout);
         return 0;
     }
 
@@ -162,6 +166,10 @@ int main(int argc, char** argv) {
         if (params.parts[i] < 0) params.parts[i] = 0;
         if (params.parts[i] > 1) params.parts[i] = 1;
     }
+
+    // last one, rise and fall. 0 = sliders stay where they are
+    params.swing = 1.0f;
+    if (argc > 30) params.swing = parse_arg(argv[30]);
 
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {

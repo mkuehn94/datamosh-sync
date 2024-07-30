@@ -58,6 +58,8 @@ VideoMosher::VideoMosher() {
     last_treble = 0;
     glitch_left = 0;
     use_parts = false;
+    swing_frames = 0;
+    for (int i = 0; i < FX_COUNT; i++) swing_sum[i] = swing_sq[i] = 0;
     stuck_allowed = true;
     for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = true;
     void_r = void_g = void_b = 0.0f;
@@ -143,11 +145,47 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
 
 // out of its section an effect just gets slider 0 for that frame. all the
 // effects already know what to do with 0 so nothing below had to change
+void VideoMosher::swing_params(float time) {
+    swung_params = slider_params;
+    if (intensity.empty()) return;
+
+    int i = (int)(time * 20);
+    if (i < 0) i = 0;
+    if (i >= (int)intensity.size()) i = intensity.size() - 1;
+    float z = intensity[i];
+    float s = slider_params.swing;
+
+    swung_params.glitch_intensity = swung_value(FX_GLITCH, slider_params.glitch_intensity, z, s);
+    swung_params.motion_blur = swung_value(FX_BLUR, slider_params.motion_blur, z, s);
+    swung_params.color_shift = swung_value(FX_VOID, slider_params.color_shift, z, s);
+    swung_params.beat_sync = swung_value(FX_BEATSYNC, slider_params.beat_sync, z, s);
+    swung_params.rot = swung_value(FX_ROT, slider_params.rot, z, s);
+    swung_params.warp = swung_value(FX_WARP, slider_params.warp, z, s);
+    swung_params.quake = swung_value(FX_QUAKE, slider_params.quake, z, s);
+    swung_params.spectral = swung_value(FX_SPECTRAL, slider_params.spectral, z, s);
+    swung_params.groove = swung_value(FX_GROOVE, slider_params.groove, z, s);
+    swung_params.texswap = swung_value(FX_TEXSWAP, slider_params.texswap, z, s);
+    swung_params.recursion = swung_value(FX_RECURSION, slider_params.recursion, z, s);
+    swung_params.hom = swung_value(FX_HOM, slider_params.hom, z, s);
+
+    // keep score
+    float now[FX_COUNT] = {
+        swung_params.glitch_intensity, swung_params.motion_blur, swung_params.color_shift, 0, swung_params.beat_sync,
+        swung_params.rot, swung_params.warp, swung_params.quake, swung_params.spectral, swung_params.groove,
+        swung_params.texswap, swung_params.recursion, swung_params.hom
+    };
+    for (int fx = 0; fx < FX_COUNT; fx++) {
+        swing_sum[fx] += now[fx];
+        swing_sq[fx] += now[fx] * now[fx];
+    }
+    swing_frames++;
+}
+
 void VideoMosher::play_section(float time) {
     const Section* s = section_at(sections, time);
     if (!s) return;
 
-    params = slider_params;
+    params = swung_params;
 
     // build gets worse and worse, breath is almost nothing, etc
     float hard = hardness_at(*s, time);
@@ -205,6 +243,8 @@ void VideoMosher::play_section(float time) {
 }
 
 bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
+    swing_params(time);
+    params = swung_params;
     if (use_parts) play_section(time);
 
     bool on_beat = false;
@@ -581,6 +621,8 @@ void VideoMosher::motion_track(uint8_t* frame_data, int width, int height) {
 bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     params = p;
     slider_params = p;
+    swung_params = p;
+    if (p.swing > 0.001f) intensity = intensity_curve(audio);
 
     // only bother listening to the whole song if someone moved a parts slider
     float amounts[FX_COUNT] = {
@@ -675,6 +717,16 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     }
 
     cout << "done processing " << frame_count << " frames" << endl;
+
+    // what the sliders really did, before the parts and how hard stuff on top
+    if (swing_frames > 0) {
+        for (int fx = 0; fx < FX_COUNT; fx++) {
+            double m = swing_sum[fx] / swing_frames;
+            double v = swing_sq[fx] / swing_frames - m * m;
+            printf("[swing] %-10s mean %.3f sd %.3f\n", fx_name(fx), m, sqrt(v > 0 ? v : 0));
+        }
+        fflush(stdout);
+    }
 
     finish_encoding();
     cout << "wrote output to: " << output_path << endl;

@@ -39,6 +39,10 @@ const char* fx_name(int fx);
 const char* role_name(int role);
 float hardness_at(const Section& s, float time);
 float aggression(int fx, float amount, float void_tol);
+// the slider is the mean, the music moves it around that. z = how intense right
+// now, in standard deviations, swing = the global rise and fall slider
+float fx_spread(int fx);
+float swung_value(int fx, float mean, float z, float swing);
 // amounts = the how hard sliders, stuck goes by the glitch slider
 void assign_parts(std::vector<Section>& sections, const float* parts, const bool* used,
                   const float* amounts, float void_tol);

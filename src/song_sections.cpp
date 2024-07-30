@@ -459,6 +459,32 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
     return out;
 }
 
+vector<float> intensity_curve(AudioAnalyzer* audio) {
+    int n = (int)(audio->get_duration() * 20);
+    vector<float> raw(n > 0 ? n : 1, 0.0f);
+    for (int i = 0; i < n; i++) {
+        float t = i / 20.0f;
+        raw[i] = 0.5f * audio->get_current_energy(t) + 0.3f * audio->get_bass(t) + 0.2f * audio->get_treble(t);
+    }
+    // half fast half slow. only fast = it shakes with every single kick, only slow =
+    // you dont notice it moving
+    vector<float> fast = blur_curve(raw, 5);    // quarter sec
+    vector<float> slow = blur_curve(raw, 40);   // 2 sec
+    vector<float> out(raw.size());
+    for (size_t i = 0; i < raw.size(); i++) out[i] = 0.5f * fast[i] + 0.5f * slow[i];
+
+    float mean = mean_between(out, 0, out.size()), var = 0;
+    for (size_t i = 0; i < out.size(); i++) var += (out[i] - mean) * (out[i] - mean);
+    float sd = sqrt(var / out.size());
+    if (sd < 0.001f) sd = 1;  // silence
+    for (size_t i = 0; i < out.size(); i++) {
+        out[i] = (out[i] - mean) / sd;
+        if (out[i] > 2.5f) out[i] = 2.5f;
+        if (out[i] < -2.5f) out[i] = -2.5f;
+    }
+    return out;
+}
+
 void print_sections(const vector<Section>& sections) {
     for (size_t i = 0; i < sections.size(); i++) {
         const Section& s = sections[i];

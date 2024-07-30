@@ -26,6 +26,7 @@ struct ProcessParams {
     float recursion; // tiny copies of the frame inside the frame
     float hom;       // hall of mirrors, the noclip screen that never clears
     float parts[FX_COUNT];  // how much of the song every effect plays, 1 = always
+    float swing;            // rise and fall with the music, 0 = sliders stay flat
 };
 
 class VideoMosher {
@@ -41,6 +42,7 @@ private:
     // returns true if this frame landed on a beat
     bool process_frame(uint8_t* frame_data, int width, int height, float time);
     void play_section(float time);  // which effects are on right now
+    void swing_params(float time);  // slider = mean, music moves it
     bool setup_encoder(const std::string& output_path, int width, int height, AVRational rate);
     void encode_frame(uint8_t* rgb_data);
     void finish_encoding();
@@ -58,6 +60,10 @@ private:
 
     ProcessParams params;       // what the effects read, gets zeroed when out of a section
     ProcessParams slider_params;  // what the user actually set
+    ProcessParams swung_params;   // that + the music moving it around. this frame
+    std::vector<float> intensity;
+    double swing_sum[FX_COUNT], swing_sq[FX_COUNT];  // to print what really happened at the end
+    long swing_frames;
     std::vector<Section> sections;
     bool use_parts;
     bool fx_was_on[FX_COUNT];

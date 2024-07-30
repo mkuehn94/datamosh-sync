@@ -98,6 +98,39 @@ float aggression(int fx, float amount, float void_tol) {
     return a > 1 ? 1 : a;
 }
 
+// standard deviation of every effect around its slider. NOT from the table above
+// directly, mirrors measures middle of the road there but its the strongest thing
+// in here to look at and at .9 instead of .6 its a different video. so by hand,
+// looking at the table: the worse it hits the less room it gets
+float fx_spread(int fx) {
+    static const float spread[FX_COUNT] = {
+        0.30f,  // glitch, barely does anything anyway
+        0.25f,  // blur
+        0.25f,  // void
+        0.00f,  // stuck, only its length, nothing to move
+        0.18f,  // beat sync
+        0.15f,  // rot
+        0.15f,  // warp
+        0.05f,  // quake
+        0.15f,  // spectral
+        0.15f,  // sampler
+        0.10f,  // texswap
+        0.20f,  // recursion
+        0.04f,  // mirrors
+    };
+    return spread[fx];
+}
+
+float swung_value(int fx, float mean, float z, float swing) {
+    if (mean <= 0.01f) return mean;  // off stays off
+    float v = mean + fx_spread(fx) * swing * z;
+    // never all the way down. under .01 the effects switch off and throw away
+    // their buffers and then it starts over at every quiet spot
+    if (v < mean * 0.3f) v = mean * 0.3f;
+    if (v > 1) v = 1;
+    return v;
+}
+
 static float how_much_it_fits(int fx, const Section& s) {
     float sum = 0, total = 0;
     for (int f = 0; f < F_COUNT; f++) {
