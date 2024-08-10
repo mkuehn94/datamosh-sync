@@ -48,6 +48,8 @@ GtkWidget* slider_parts[FX_COUNT];
 
 // the track
 static vector<Section> sections;
+static vector<float> swing_curve;  // 4 per second
+GtkWidget* slider_swing;
 static string sections_for;     // which video they belong to
 static GtkWidget* sliders_box = nullptr;
 static bool track_ready = false;  // false = sliders moved since the last calculate
@@ -134,6 +136,8 @@ static void on_backend_line(const char* line) {
 
     if (strncmp(line, "SECTION ", 8) == 0) {
         parse_section_line(line);
+    } else if (strncmp(line, "SWING ", 6) == 0) {
+        swing_curve.push_back(g_ascii_strtod(line + 6, nullptr));
     } else if (strncmp(line, "source fps: ", 12) == 0) {
         render_fps = g_ascii_strtod(line + 12, nullptr);
     } else if (strncmp(line, "processed ", 10) == 0 && render_fps > 0) {
@@ -197,6 +201,7 @@ static bool analyze_song(const char* input) {
 
     gtk_label_set_text(GTK_LABEL(label_status), "listening to the song... (big video takes a bit)");
     sections.clear();
+    swing_curve.clear();
     sections_for = "";
     track_ready = false;
     gtk_widget_queue_draw(track_area);
@@ -293,6 +298,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
     args.push_back(fmt(slider_recursion, "%.3f"));
     args.push_back(fmt(slider_hom, "%.3f"));
     for (int i = 0; i < FX_COUNT; i++) args.push_back(fmt(slider_parts[i], "%.3f"));
+    args.push_back(fmt(slider_swing, "%.3f"));
 
     gtk_label_set_text(GTK_LABEL(label_status), "processing... (check terminal)");
     playhead = 0;
@@ -317,7 +323,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
 static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
     int W = gtk_widget_get_allocated_width(area);
     int H = gtk_widget_get_allocated_height(area);
-    const int LEFT = 80, RIGHT = 42, TOP = 44;
+    const int LEFT = 80, RIGHT = 88, TOP = 44;
     int rowh = (H - TOP - 14) / FX_COUNT;
 
     cairo_set_source_rgb(cr, 0.07, 0.07, 0.09);
@@ -337,8 +343,9 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
 
     const Section* now = playhead >= 0 ? section_at(sections, playhead) : nullptr;
     bool used[FX_COUNT];
-    float amounts_unused[FX_COUNT];
-    read_used(used, amounts_unused);
+    float amounts[FX_COUNT];
+    read_used(used, amounts);
+    float swing = gtk_range_get_value(GTK_RANGE(slider_swing));
 
     // top strip: how loud (bar height), what part of the song it thinks this is
     // (color + name) and how hard everything hits right now (white line)
@@ -413,8 +420,34 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
             cairo_fill(cr);
         }
 
-        char pct[16];
-        snprintf(pct, sizeof(pct), "%d%%", (int)(played / song * 100 + 0.5f));
+        // the actual value over time, where it plays. bottom of the row = 0, top = 1
+        // bit jaggy, one point every 4 pixels
+        if (used[fx] && fx != FX_STUCK && !swing_curve.empty()) {
+            cairo_set_source_rgba(cr, 1, 1, 1, 0.9);
+            cairo_set_line_width(cr, 1);
+            bool drawing = false;
+            for (int px = 0; px < tw; px += 4) {
+                float t = (float)px / tw * song;
+                const Section* s = section_at(sections, t);
+                if (!s->on[fx]) {
+                    drawing = false;
+                    continue;
+                }
+                int zi = (int)(t * 4);
+                if (zi >= (int)swing_curve.size()) zi = swing_curve.size() - 1;
+                float v = swung_value(fx, amounts[fx], swing_curve[zi], swing) * hardness_at(*s, t) * s->fx_scale[fx];
+                if (v > 1) v = 1;
+                double vy = y + rowh - 2 - v * (rowh - 4);
+                if (drawing) cairo_line_to(cr, LEFT + px, vy);
+                else cairo_move_to(cr, LEFT + px, vy);
+                drawing = true;
+            }
+            cairo_stroke(cr);
+        }
+
+        char pct[32];
+        // shows how much it moves too
+        snprintf(pct, sizeof(pct), "%d%%  \302\261%.2f", (int)(played / song * 100 + 0.5f), fx_spread(fx) * swing);
         cairo_set_source_rgb(cr, 0.85, 0.85, 0.85);
         cairo_move_to(cr, W - RIGHT + 6, y + rowh - 4);
         cairo_show_text(cr, pct);
@@ -515,7 +548,7 @@ int main(int argc, char** argv) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "datamosh-sync 0.3");
-    gtk_window_set_default_size(GTK_WINDOW(window), 980, 860);
+    gtk_window_set_default_size(GTK_WINDOW(window), 980, 890);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
     g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
 
@@ -572,6 +605,10 @@ int main(int argc, char** argv) {
     // maybe: Subtle / Normal / Extreme / Chaos
     // NOTE: sliders actually do something now at ALL positions.
     // (effects used to have hard thresholds so mid settings = clean video)
+
+    // slider = the mean, music moves it around that. strong effects hardly move
+    gtk_grid_attach(GTK_GRID(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), 0, grid_row++, 3, 1);
+    slider_swing = make_slider(sliders_box, "RISE AND FALL with the music (0 = flat)", 0.0, 1.0, 1.0, 0.01);
 
     // --- the track ---
     track_area = gtk_drawing_area_new();
