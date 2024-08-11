@@ -29,6 +29,10 @@ public:
     void estimate_motion(const uint8_t* rgb);
     bool scene_cut() { return cut_detected; }
 
+    // second video. eyes = other engine that ran estimate_motion on it, amount = how
+    // much of the picture listens to it. null = just the one video like before
+    void look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amount);
+
     void rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a);
     void block_recursion(uint8_t* data, float amount, const AudioFrame& a);
     void texture_swap(uint8_t* data, float amount, const AudioFrame& a);
@@ -85,6 +89,11 @@ private:
     int refresh_kind;
     float refresh_x, refresh_y;
     int kicks_since_refresh;
+
+    // the other video
+    const uint8_t* other_rgb;
+    WarpEngine* other_eyes;
+    float other_amount;
 
     // quake
     std::vector<uint8_t*> ring_frames;

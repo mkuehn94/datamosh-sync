@@ -39,6 +39,9 @@ WarpEngine::WarpEngine() {
     kicks_since_refresh = 0;
     ring_pos = ring_count = 0;
     quake_tape = false;
+    other_rgb = nullptr;
+    other_eyes = nullptr;
+    other_amount = 0;
     quake_levels = 3;
     coef_ready = false;
     spectral_flip = false;
@@ -325,6 +328,12 @@ void WarpEngine::update_sampler(const AudioFrame& a) {
 // outlines. thats THE datamosh look, and we get to do it per block, on
 // purpose, in sync, with vectors we made up
 
+void WarpEngine::look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amount) {
+    other_rgb = rgb;
+    other_eyes = eyes;
+    other_amount = amount;
+}
+
 void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
     int size = w * h * 3;
 
@@ -383,6 +392,17 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
             int idx = by * gx + bx;
             int x0 = bx * BLOCK, y0 = by * BLOCK;
             int mx = mvx[idx], my = mvy[idx];
+
+            // this chunk belongs to the other video? then the motion comes from there.
+            // this is the whole trick, the street moves like its in tokyo
+            if (other_eyes) {
+                unsigned hh2 = ((unsigned)(by / 6) * 19349663u) ^ ((unsigned)(bx / 6) * 83492791u);
+                hh2 = hh2 * 2654435761u;
+                if ((hh2 >> 16) / 65536.0f < other_amount) {
+                    mx = other_eyes->mvx[idx];
+                    my = other_eyes->mvy[idx];
+                }
+            }
 
             // hijacked vector = real motion + the warp field
             // leftover subpixel stuff carries to the next frame, otherwise

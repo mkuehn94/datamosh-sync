@@ -729,6 +729,12 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
                 fclose(dump);
                 cerr << "[other] dumped a frame" << endl;
             }
+            if (!other_eyes) {
+                other_eyes = new WarpEngine();
+                other_eyes->init(width, height, fps);
+            }
+            other_eyes->estimate_motion(other_rgb);
+            warp->look_at_other(other_rgb, other_eyes, p.cross);
             if (out_index % 60 == 0) {
                 cerr << "[other] frame " << out_index << " first bytes "
                      << (int)other_rgb[0] << " " << (int)other_rgb[1] << " " << (int)other_rgb[2] << endl;
