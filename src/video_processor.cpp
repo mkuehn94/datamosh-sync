@@ -1,13 +1,14 @@
 #include "video_processor.h"
 #include "constants.h"
 #include <iostream>
+#include <cstring>
 
 using namespace std;
 
 VideoProcessor::VideoProcessor()
     : fmt_ctx(nullptr), codec_ctx(nullptr), frame(nullptr),
       frame_rgb(nullptr), packet(nullptr), sws_ctx(nullptr),
-      rgb_buffer(nullptr), sized_ctx(nullptr), sized_buffer(nullptr),
+      rgb_buffer(nullptr), sized_ctx(nullptr), sized_buffer(nullptr), sized_tmp(nullptr),
       video_stream_idx(-1), width(0), height(0) {
 }
 
@@ -71,6 +72,7 @@ bool VideoProcessor::open(const string& path) {
 void VideoProcessor::close() {
     if (rgb_buffer) free(rgb_buffer);
     if (sized_buffer) free(sized_buffer);
+    if (sized_tmp) free(sized_tmp);
     if (sized_ctx) sws_freeContext(sized_ctx);
     if (frame_rgb) av_frame_free(&frame_rgb);
     if (sws_ctx) sws_freeContext(sws_ctx);
@@ -116,16 +118,31 @@ double VideoProcessor::get_duration() {
 }
 
 uint8_t* VideoProcessor::get_frame_rgb_sized(int out_w, int out_h) {
+    // scale so it covers the whole picture then cut off whats sticking out.
+    // squishing it to fit looks wrong
+    float sc = (float)out_w / width;
+    if ((float)out_h / height > sc) sc = (float)out_h / height;
+    int sw_ = (int)(width * sc + 0.5f), sh_ = (int)(height * sc + 0.5f);
+    if (sw_ < out_w) sw_ = out_w;
+    if (sh_ < out_h) sh_ = out_h;
+
     if (!sized_ctx) {
         sized_ctx = sws_getContext(width, height, codec_ctx->pix_fmt,
-                                   out_w, out_h, AV_PIX_FMT_RGB24,
+                                   sw_, sh_, AV_PIX_FMT_RGB24,
                                    SWS_BILINEAR, nullptr, nullptr, nullptr);
+        sized_tmp = (uint8_t*)malloc(sw_ * sh_ * 3);
         sized_buffer = (uint8_t*)malloc(out_w * out_h * 3);
-        cout << "[vp] other video " << width << "x" << height << " -> " << out_w << "x" << out_h << endl;
+        cout << "[vp] other video " << width << "x" << height << " -> " << sw_ << "x" << sh_
+             << " cut to " << out_w << "x" << out_h << endl;
     }
-    uint8_t* dst[4] = {sized_buffer, nullptr, nullptr, nullptr};
-    int lines[4] = {out_w * 3, 0, 0, 0};
+    uint8_t* dst[4] = {sized_tmp, nullptr, nullptr, nullptr};
+    int lines[4] = {sw_ * 3, 0, 0, 0};
     sws_scale(sized_ctx, frame->data, frame->linesize, 0, height, dst, lines);
+
+    int ox = (sw_ - out_w) / 2, oy = (sh_ - out_h) / 2;
+    for (int y = 0; y < out_h; y++) {
+        memcpy(sized_buffer + y * out_w * 3, sized_tmp + ((y + oy) * sw_ + ox) * 3, out_w * 3);
+    }
     return sized_buffer;
 }
 

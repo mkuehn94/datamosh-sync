@@ -38,6 +38,7 @@ private:
     uint8_t* rgb_buffer;
     struct SwsContext* sized_ctx;
     uint8_t* sized_buffer;
+    uint8_t* sized_tmp;
     int video_stream_idx;
     int width, height;
 };
