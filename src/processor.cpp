@@ -58,6 +58,9 @@ VideoMosher::VideoMosher() {
     last_treble = 0;
     glitch_left = 0;
     use_parts = false;
+    other = nullptr;
+    other_eyes = nullptr;
+    a_read = b_read = 0;
     swing_frames = 0;
     for (int i = 0; i < FX_COUNT; i++) swing_sum[i] = swing_sq[i] = 0;
     stuck_allowed = true;
@@ -240,6 +243,28 @@ void VideoMosher::play_section(float time) {
     if (s->on[FX_BLUR] && !fx_was_on[FX_BLUR] && ghost_buf) memset(ghost_buf, 0, ghost_buf_size);
 
     for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = s->on[i];
+}
+
+bool VideoMosher::open_other(const string& path) {
+    other = new VideoProcessor();
+    if (!other->open(path)) {
+        cerr << "cant open the other video: " << path << endl;
+        delete other;
+        other = nullptr;
+        return false;
+    }
+    return true;
+}
+
+// reads until this video is where the output is. with the same fps thats one read
+bool VideoMosher::catch_up(VideoProcessor* v, long& read, double src_fps, long frame_index, double out_fps) {
+    long want = (long)((frame_index + 1) * src_fps / out_fps + 0.0001);
+    if (want <= read) want = read + 1;
+    while (read < want) {
+        if (!v->read_frame()) return false;
+        read++;
+    }
+    return true;
 }
 
 bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, float time) {
@@ -657,6 +682,14 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     int width = video->get_width();
     int height = video->get_height();
     AVRational src_fps = video->get_fps();
+    double a_fps = av_q2d(src_fps), b_fps = 0;
+    // two videos: output goes at the slower one
+    if (other) {
+        AVRational o = other->get_fps();
+        b_fps = av_q2d(o);
+        if (b_fps < a_fps) src_fps = o;
+        cout << "[other] fps " << a_fps << " + " << b_fps << " -> " << av_q2d(src_fps) << endl;
+    }
     fps = av_q2d(src_fps);
     cout << "source fps: " << fps << endl;
 
@@ -674,7 +707,25 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     float dt = 1.0 / fps;
     int frame_count = 0;
 
-    while (video->read_frame()) {
+    long out_index = -1;
+    uint8_t* other_rgb = nullptr;
+    while (true) {
+        out_index++;
+        if (!other) {
+            if (!video->read_frame()) break;
+        } else {
+            if (!catch_up(video, a_read, a_fps, out_index, fps)) break;
+            if (!catch_up(other, b_read, b_fps, out_index, fps)) {
+                cout << "[other] ran out first at frame " << out_index << endl;
+                break;
+            }
+            other_rgb = other->get_frame_rgb_sized(width, height);
+            if (!other_rgb) { cerr << "[other] null frame??" << endl; exit(1); }
+            if (out_index % 60 == 0) {
+                cerr << "[other] frame " << out_index << " first bytes "
+                     << (int)other_rgb[0] << " " << (int)other_rgb[1] << " " << (int)other_rgb[2] << endl;
+            }
+        }
         uint8_t* frame_data = video->get_frame_rgb();  // get RGB not YUV
 
         if (frame_data && width > 0 && height > 0) {
@@ -701,7 +752,13 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
                 // numbers were tuned at 30fps
                 int hold = (1 + (int)(last_energy * 5.0f * params.beat_sync)) * fps / 30.0f;
                 for (int h = 0; h < hold; h++) {
-                    if (!video->read_frame()) break;  // consume real frames, toss em
+                    out_index++;
+                    if (!other) {
+                        if (!video->read_frame()) break;  // consume real frames, toss em
+                    } else {
+                        if (!catch_up(video, a_read, a_fps, out_index, fps)) break;
+                        if (!catch_up(other, b_read, b_fps, out_index, fps)) break;
+                    }
                     encode_frame(held_frame);
                     frame_count++;
                     time += dt;

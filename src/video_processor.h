@@ -24,6 +24,9 @@ public:
     int get_width() { return width; }
     int get_height() { return height; }
     AVRational get_fps();  // real framerate of the source
+    double get_duration();
+    // for the second video, has to be the same size as the first one
+    uint8_t* get_frame_rgb_sized(int out_w, int out_h);
 
 private:
     AVFormatContext* fmt_ctx;
@@ -33,6 +36,8 @@ private:
     AVPacket* packet;
     struct SwsContext* sws_ctx;  // for YUV->RGB conversion
     uint8_t* rgb_buffer;
+    struct SwsContext* sized_ctx;
+    uint8_t* sized_buffer;
     int video_stream_idx;
     int width, height;
 };

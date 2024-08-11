@@ -60,6 +60,20 @@ static float parse_arg(const char* a) {
 int main(int argc, char** argv) {
     cout << "datamosh-sync v0.3" << endl;
 
+    // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was
+    string other_path = "";
+    {
+        int out = 1;
+        for (int i = 1; i < argc; i++) {
+            if (string(argv[i]) == "--other" && i + 1 < argc) {
+                other_path = argv[++i];
+            } else {
+                argv[out++] = argv[i];
+            }
+        }
+        argc = out;
+    }
+
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <video> [audio]" << endl;
         cerr << "  If audio is omitted, will try to extract from video" << endl;
@@ -113,6 +127,8 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+
+    if (!other_path.empty() && !mosher.open_other(other_path)) return 1;
 
     ProcessParams params = {
         0.5f,   // glitch_intensity
@@ -170,6 +186,7 @@ int main(int argc, char** argv) {
     // last one, rise and fall. 0 = sliders stay where they are
     params.swing = 1.0f;
     if (argc > 30) params.swing = parse_arg(argv[30]);
+    params.cross = 0.5f;
 
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {

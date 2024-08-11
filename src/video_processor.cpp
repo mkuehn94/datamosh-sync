@@ -7,7 +7,8 @@ using namespace std;
 VideoProcessor::VideoProcessor()
     : fmt_ctx(nullptr), codec_ctx(nullptr), frame(nullptr),
       frame_rgb(nullptr), packet(nullptr), sws_ctx(nullptr),
-      rgb_buffer(nullptr), video_stream_idx(-1), width(0), height(0) {
+      rgb_buffer(nullptr), sized_ctx(nullptr), sized_buffer(nullptr),
+      video_stream_idx(-1), width(0), height(0) {
 }
 
 VideoProcessor::~VideoProcessor() {
@@ -69,6 +70,8 @@ bool VideoProcessor::open(const string& path) {
 
 void VideoProcessor::close() {
     if (rgb_buffer) free(rgb_buffer);
+    if (sized_buffer) free(sized_buffer);
+    if (sized_ctx) sws_freeContext(sized_ctx);
     if (frame_rgb) av_frame_free(&frame_rgb);
     if (sws_ctx) sws_freeContext(sws_ctx);
     if (frame) av_frame_free(&frame);
@@ -106,6 +109,24 @@ AVRational VideoProcessor::get_fps() {
         r.den = 1;
     }
     return r;
+}
+
+double VideoProcessor::get_duration() {
+    return fmt_ctx->duration / (double)AV_TIME_BASE;
+}
+
+uint8_t* VideoProcessor::get_frame_rgb_sized(int out_w, int out_h) {
+    if (!sized_ctx) {
+        sized_ctx = sws_getContext(width, height, codec_ctx->pix_fmt,
+                                   out_w, out_h, AV_PIX_FMT_RGB24,
+                                   SWS_BILINEAR, nullptr, nullptr, nullptr);
+        sized_buffer = (uint8_t*)malloc(out_w * out_h * 3);
+        cout << "[vp] other video " << width << "x" << height << " -> " << out_w << "x" << out_h << endl;
+    }
+    uint8_t* dst[4] = {sized_buffer, nullptr, nullptr, nullptr};
+    int lines[4] = {out_w * 3, 0, 0, 0};
+    sws_scale(sized_ctx, frame->data, frame->linesize, 0, height, dst, lines);
+    return sized_buffer;
 }
 
 uint8_t* VideoProcessor::get_frame_data() {

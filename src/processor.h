@@ -27,6 +27,7 @@ struct ProcessParams {
     float hom;       // hall of mirrors, the noclip screen that never clears
     float parts[FX_COUNT];  // how much of the song every effect plays, 1 = always
     float swing;            // rise and fall with the music, 0 = sliders stay flat
+    float cross;            // how much of the picture belongs to the other video
 };
 
 class VideoMosher {
@@ -37,6 +38,7 @@ public:
     bool init(const std::string& video_path, const std::string& audio_path);
     bool init_with_embedded_audio(const std::string& video_path);  // use video's audio track
     bool process_video(const std::string& output_path, ProcessParams params);
+    bool open_other(const std::string& path);  // second video, optional
 
 private:
     // returns true if this frame landed on a beat
@@ -53,6 +55,10 @@ private:
     // bool copy_audio_stream();  // REMOVED - was causing issues
 
     VideoProcessor* video;
+    VideoProcessor* other;     // second video or null
+    WarpEngine* other_eyes;    // only here to measure the motion of the other video
+    long a_read, b_read;
+    bool catch_up(VideoProcessor* v, long& read, double src_fps, long frame_index, double out_fps);
     AudioAnalyzer* audio;
     EffectEngine* effects;
     WarpEngine* warp;
