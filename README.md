@@ -158,6 +158,22 @@ NOTE
 
 NOTE dont put everything up high at once, its just grey noise. pick 2 or 3
 
+## rise and fall
+
+the slider isnt a fixed value anymore, its the MEAN. the value goes up and down
+around it with how intense the music is right now (half quarter second, half 2
+seconds, so it moves but doesnt shake on every kick)
+
+how far it moves depends on the effect, thats the +- on the track and the table
+in fx_spread in src/arrange.cpp. glitch moves +-.3, quake +-.05, hall of mirrors
++-.04 because at those a small change is already a different video. picked by hand
+
+white line on the track = the real value there, bottom of the row 0, top 1. the
+terminal prints what really happened at the end, look for [swing]
+
+global slider RISE AND FALL, 0 = flat like before. on the command line its the very
+last arg, after the 13 parts ones. left out = 1
+
 ## what it looks like
 
 every effect alone at max, everything else off. 3 random 5 sec clips from a drone video,
