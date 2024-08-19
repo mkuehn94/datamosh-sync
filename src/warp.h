@@ -94,6 +94,8 @@ private:
     const uint8_t* other_rgb;
     WarpEngine* other_eyes;
     float other_amount;
+    uint8_t* other_prev;
+    int other_bar, other_kicks;  // which chunks belong to it changes every few kicks
 
     // quake
     std::vector<uint8_t*> ring_frames;

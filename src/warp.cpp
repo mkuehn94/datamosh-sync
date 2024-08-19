@@ -42,6 +42,9 @@ WarpEngine::WarpEngine() {
     other_rgb = nullptr;
     other_eyes = nullptr;
     other_amount = 0;
+    other_prev = nullptr;
+    other_bar = 0;
+    other_kicks = 0;
     quake_levels = 3;
     coef_ready = false;
     spectral_flip = false;
@@ -69,6 +72,7 @@ WarpEngine::WarpEngine() {
 WarpEngine::~WarpEngine() {
     free(luma); free(prev_luma); free(small); free(prev_small);
     free(canvas); free(canvas_tmp); free(prev_src);
+    free(other_prev);
     free(recur_prev);
     free(hom_buf);
     free(hom_ref);
@@ -332,6 +336,10 @@ void WarpEngine::look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amoun
     other_rgb = rgb;
     other_eyes = eyes;
     other_amount = amount;
+    if (!other_prev) {
+        other_prev = (uint8_t*)malloc(w * h * 3);
+        memcpy(other_prev, rgb, w * h * 3);
+    }
 }
 
 void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
@@ -345,7 +353,8 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
     }
     if (groove > 0.01f) update_sampler(a);
 
-    if (rot < 0.01f && warp < 0.01f && groove < 0.01f) {
+    // other video on: has to run even with rot at 0 or nothing of it ever shows
+    if (rot < 0.01f && warp < 0.01f && groove < 0.01f && !other_eyes) {
         memcpy(prev_src, data, size);
         canvas_ready = false;  // next time it starts rotting from the picture of THAT moment
         return;
@@ -395,12 +404,20 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
             // this chunk belongs to the other video? then the motion comes from there.
             // this is the whole trick, the street moves like its in tokyo
+            // the whole block comes from over there, motion residual and healing
+            const uint8_t* src = data;
+            const uint8_t* prv = prev_src;
+            int berr = block_err[idx];
             if (other_eyes) {
-                unsigned hh2 = ((unsigned)(by / 6) * 19349663u) ^ ((unsigned)(bx / 6) * 83492791u);
+                unsigned hh2 = ((unsigned)(by / 6) * 19349663u) ^ ((unsigned)(bx / 6) * 83492791u)
+                             ^ ((unsigned)other_bar * 15485863u);
                 hh2 = hh2 * 2654435761u;
                 if ((hh2 >> 16) / 65536.0f < other_amount) {
                     mx = other_eyes->mvx[idx];
                     my = other_eyes->mvy[idx];
+                    berr = other_eyes->block_err[idx];
+                    src = other_rgb;
+                    prv = other_prev;
                 }
             }
 
@@ -440,7 +457,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                 // THE moment. real mosh = you delete the i-frame here, new
                 // scene never arrives, its motion moves the old scene
                 mode = d < r ? 2 : 1;
-            } else if (block_err[idx] > 40) {
+            } else if (berr > 40) {
                 // nothing in the ref matches, encoder would go intra here.
                 // rot refuses most of the time
                 mode = d < r * 0.97f ? 2 : 1;
@@ -448,7 +465,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                 mode = 1;
             } else if (d2 < luma_heal) {
                 mode = 3;
-            } else if (block_err[idx] < 5) {
+            } else if (berr < 5) {
                 // barely changed = P-skip, a real encoder wouldnt send a
                 // residual either. without this sensor noise and the source
                 // compression add up in the canvas into grain
@@ -471,9 +488,9 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
                     int di = (py * w + px) * 3;
                     if (mode == 1) {
-                        canvas_tmp[di] = data[di];
-                        canvas_tmp[di+1] = data[di+1];
-                        canvas_tmp[di+2] = data[di+2];
+                        canvas_tmp[di] = src[di];
+                        canvas_tmp[di+1] = src[di+1];
+                        canvas_tmp[di+2] = src[di+2];
                         continue;
                     }
 
@@ -489,16 +506,16 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                         if (rx < 0) rx = 0; else if (rx >= w) rx = w - 1;
                         if (ry < 0) ry = 0; else if (ry >= h) ry = h - 1;
                         int pi = (ry * w + rx) * 3;
-                        r0 += data[di]   - prev_src[pi];
-                        g0 += data[di+1] - prev_src[pi+1];
-                        b0 += data[di+2] - prev_src[pi+2];
+                        r0 += src[di]   - prv[pi];
+                        g0 += src[di+1] - prv[pi+1];
+                        b0 += src[di+2] - prv[pi+2];
                     }
 
                     if (mode == 3) {
                         // brightness comes back, color doesnt. so the street
                         // is sharp again but still painted in the colors of
                         // wherever we were 5 seconds ago
-                        int yn = (data[di] + 2*data[di+1] + data[di+2]) >> 2;
+                        int yn = (src[di] + 2*src[di+1] + src[di+2]) >> 2;
                         int yc = (r0 + 2*g0 + b0) >> 2;
                         int dl = yn - yc;
                         r0 += dl; g0 += dl; b0 += dl;
@@ -525,6 +542,11 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
     memcpy(prev_src, data, size);
     swap(canvas, canvas_tmp);
+    if (other_prev) memcpy(other_prev, other_rgb, w * h * 3);
+    if (other_eyes && a.kick) {
+        other_kicks++;
+        if (other_kicks % 8 == 0) other_bar++;
+    }
     memcpy(data, canvas, size);
 }
 

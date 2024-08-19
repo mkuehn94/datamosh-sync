@@ -721,14 +721,6 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
             }
             other_rgb = other->get_frame_rgb_sized(width, height);
             if (!other_rgb) { cerr << "[other] null frame??" << endl; exit(1); }
-            // ok is it really black or is the 10 bit thing broken. dump one and look
-            if (out_index == 120) {
-                FILE* dump = fopen("other_dump.ppm", "wb");
-                fprintf(dump, "P6\n%d %d\n255\n", width, height);
-                fwrite(other_rgb, 1, width * height * 3, dump);
-                fclose(dump);
-                cerr << "[other] dumped a frame" << endl;
-            }
             if (!other_eyes) {
                 other_eyes = new WarpEngine();
                 other_eyes->init(width, height, fps);
