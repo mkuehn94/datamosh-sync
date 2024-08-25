@@ -96,6 +96,10 @@ private:
     float other_amount;
     uint8_t* other_prev;
     int other_bar, other_kicks;  // which chunks belong to it changes every few kicks
+    std::vector<float> other_field;
+    int other_field_bar;
+    unsigned other_seed;
+    void make_other_field();
 
     // quake
     std::vector<uint8_t*> ring_frames;

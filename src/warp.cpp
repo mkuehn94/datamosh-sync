@@ -44,6 +44,8 @@ WarpEngine::WarpEngine() {
     other_amount = 0;
     other_prev = nullptr;
     other_bar = 0;
+    other_field_bar = -1;
+    other_seed = 212223;
     other_kicks = 0;
     quake_levels = 3;
     coef_ready = false;
@@ -337,9 +339,43 @@ void WarpEngine::look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amoun
     other_eyes = eyes;
     other_amount = amount;
     if (!other_prev) {
+        make_other_field();
         other_prev = (uint8_t*)malloc(w * h * 3);
         memcpy(other_prev, rgb, w * h * 3);
     }
+}
+
+// where the other video shows through. random noise blurred a lot so you get blobs
+// and rifts with messy edges and not squares. 0-1 evenly so amount .3 really is 30%
+void WarpEngine::make_other_field() {
+    vector<float> f(gx * gy), t(gx * gy);
+    for (int i = 0; i < gx * gy; i++) f[i] = rnd(&other_seed);
+    for (int pass = 0; pass < 3; pass++) {
+        for (int by = 0; by < gy; by++) {
+            for (int bx = 0; bx < gx; bx++) {
+                float s = 0;
+                int n = 0;
+                for (int j = max(0, by - 3); j <= min(gy - 1, by + 3); j++) {
+                    for (int i = max(0, bx - 3); i <= min(gx - 1, bx + 3); i++) {
+                        s += f[j * gx + i];
+                        n++;
+                    }
+                }
+                t[by * gx + bx] = s / n;
+            }
+        }
+        f = t;
+    }
+    // little bit of the raw noise back on so the edges arent so smooth
+    for (int i = 0; i < gx * gy; i++) f[i] += (rnd(&other_seed) - 0.5f) * 0.02f;
+
+    vector<float> sorted = f;
+    sort(sorted.begin(), sorted.end());
+    other_field.resize(gx * gy);
+    for (int i = 0; i < gx * gy; i++) {
+        other_field[i] = (lower_bound(sorted.begin(), sorted.end(), f[i]) - sorted.begin()) / (float)(gx * gy);
+    }
+    other_field_bar = other_bar;
 }
 
 void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
@@ -409,10 +445,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
             const uint8_t* prv = prev_src;
             int berr = block_err[idx];
             if (other_eyes) {
-                unsigned hh2 = ((unsigned)(by / 6) * 19349663u) ^ ((unsigned)(bx / 6) * 83492791u)
-                             ^ ((unsigned)other_bar * 15485863u);
-                hh2 = hh2 * 2654435761u;
-                if ((hh2 >> 16) / 65536.0f < other_amount) {
+                if (other_field[idx] < other_amount) {
                     mx = other_eyes->mvx[idx];
                     my = other_eyes->mvy[idx];
                     berr = other_eyes->block_err[idx];
@@ -547,6 +580,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
         other_kicks++;
         if (other_kicks % 8 == 0) other_bar++;
     }
+    if (other_eyes && other_bar != other_field_bar) make_other_field();
     memcpy(data, canvas, size);
 }
 
