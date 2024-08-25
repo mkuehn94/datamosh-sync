@@ -62,11 +62,14 @@ int main(int argc, char** argv) {
 
     // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was
     string other_path = "";
+    float cross_amount = 0.5f;
     {
         int out = 1;
         for (int i = 1; i < argc; i++) {
             if (string(argv[i]) == "--other" && i + 1 < argc) {
                 other_path = argv[++i];
+            } else if (string(argv[i]) == "--cross" && i + 1 < argc) {
+                cross_amount = parse_arg(argv[++i]);
             } else {
                 argv[out++] = argv[i];
             }
@@ -186,7 +189,7 @@ int main(int argc, char** argv) {
     // last one, rise and fall. 0 = sliders stay where they are
     params.swing = 1.0f;
     if (argc > 30) params.swing = parse_arg(argv[30]);
-    params.cross = 0.5f;
+    params.cross = cross_amount;
 
     cout << "processing..." << endl;
     if (!mosher.process_video(tmp_path, params)) {
