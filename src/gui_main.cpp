@@ -24,6 +24,9 @@ using namespace std;
 // global widgets we need to read from callback
 GtkWidget* label_status;
 GtkWidget* entry_input;
+GtkWidget* entry_other;    // second video, empty = just the one
+GtkWidget* combo_music;
+GtkWidget* slider_cross;
 
 GtkWidget* slider_glitch;
 GtkWidget* slider_jpeg;
@@ -108,6 +111,10 @@ static void on_slider_moved(GtkRange*, gpointer) {
 }
 
 static void on_path_changed(GtkEditable*, gpointer) {
+    track_is_outdated();
+}
+
+static void on_combo_changed(GtkComboBox*, gpointer) {
     track_is_outdated();
 }
 
@@ -196,8 +203,27 @@ static int run_backend(const vector<string>& args) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
+// --other b.mp4 --music b --cross .5 if theres a second video
+static void add_other_args(vector<string>& args, bool with_cross) {
+    string o = gtk_entry_get_text(GTK_ENTRY(entry_other));
+    if (o.empty()) return;
+    args.push_back("--other");
+    args.push_back(o);
+    args.push_back("--music");
+    args.push_back(gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_music)));
+    if (with_cross) {
+        args.push_back("--cross");
+        char buf[32];
+        g_ascii_formatd(buf, sizeof(buf), "%.3f", gtk_range_get_value(GTK_RANGE(slider_cross)));
+        args.push_back(buf);
+    }
+}
+
 static bool analyze_song(const char* input) {
-    if (sections_for == input && !sections.empty()) return true;
+    // same video but other music or other second video = different song
+    string key = string(input) + "|" + gtk_entry_get_text(GTK_ENTRY(entry_other)) + "|"
+               + gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_music));
+    if (sections_for == key && !sections.empty()) return true;
 
     gtk_label_set_text(GTK_LABEL(label_status), "listening to the song... (big video takes a bit)");
     sections.clear();
@@ -208,6 +234,7 @@ static bool analyze_song(const char* input) {
 
     vector<string> args;
     args.push_back("datamosh-sync");
+    add_other_args(args, false);
     args.push_back("--sections");
     args.push_back(input);
     int rc = run_backend(args);
@@ -218,7 +245,7 @@ static bool analyze_song(const char* input) {
         gtk_widget_queue_draw(track_area);
         return false;
     }
-    sections_for = input;
+    sections_for = key;
     return true;
 }
 
@@ -236,6 +263,8 @@ static void set_busy(bool busy) {
     gtk_widget_set_sensitive(btn_track, !busy);
     gtk_widget_set_sensitive(sliders_box, !busy);  // or the track lies about the running render
     gtk_widget_set_sensitive(entry_input, !busy);
+    gtk_widget_set_sensitive(entry_other, !busy);
+    gtk_widget_set_sensitive(combo_music, !busy);
     gtk_widget_set_sensitive(btn_browse, !busy);
 }
 
@@ -281,6 +310,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
 
     vector<string> args;
     args.push_back("datamosh-sync");
+    add_other_args(args, true);
     args.push_back(path);
     args.push_back("");  // no separate audio
     args.push_back(fmt(slider_glitch, "%.3f"));
@@ -514,6 +544,32 @@ static void on_file_chooser_clicked(GtkWidget* widget, gpointer data) {
     gtk_widget_destroy(dialog);
 }
 
+static void on_other_chooser_clicked(GtkWidget* widget, gpointer data) {
+    GtkWidget* dialog = gtk_file_chooser_dialog_new(
+        "Open the other video", GTK_WINDOW(data),
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Open", GTK_RESPONSE_ACCEPT,
+        NULL
+    );
+
+    // filter for video files
+    GtkFileFilter* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Video files");
+    gtk_file_filter_add_pattern(filter, "*.mp4");
+    gtk_file_filter_add_pattern(filter, "*.avi");
+    gtk_file_filter_add_pattern(filter, "*.mov");
+    gtk_file_filter_add_pattern(filter, "*.mkv");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char* filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        gtk_entry_set_text(GTK_ENTRY(entry_other), filename);
+        g_free(filename);
+    }
+    gtk_widget_destroy(dialog);
+}
+
 // helper: one row of the grid, label + how hard + (maybe) how much of the song
 // returns the GtkScale widget
 static int grid_row = 1;
@@ -548,7 +604,7 @@ int main(int argc, char** argv) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "datamosh-sync 0.3");
-    gtk_window_set_default_size(GTK_WINDOW(window), 980, 890);
+    gtk_window_set_default_size(GTK_WINDOW(window), 980, 950);
     gtk_container_set_border_width(GTK_CONTAINER(window), 10);
     g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), NULL);
 
@@ -565,6 +621,24 @@ int main(int argc, char** argv) {
     g_signal_connect(btn_browse, "clicked", G_CALLBACK(on_file_chooser_clicked), window);
     gtk_box_pack_start(GTK_BOX(hbox_file), btn_browse, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), hbox_file, FALSE, FALSE, 0);
+
+    // --- the other video, leave it empty for just the one ---
+    GtkWidget* hbox_other = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    entry_other = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry_other), "other video (optional)...");
+    g_signal_connect(entry_other, "changed", G_CALLBACK(on_path_changed), NULL);
+    gtk_box_pack_start(GTK_BOX(hbox_other), entry_other, TRUE, TRUE, 0);
+    GtkWidget* btn_browse2 = gtk_button_new_with_label("Browse");
+    g_signal_connect(btn_browse2, "clicked", G_CALLBACK(on_other_chooser_clicked), window);
+    gtk_box_pack_start(GTK_BOX(hbox_other), btn_browse2, FALSE, FALSE, 0);
+    combo_music = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_music), "a", "music: first video");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_music), "b", "music: other video");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo_music), "both", "music: both mixed");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo_music), 0);
+    g_signal_connect(combo_music, "changed", G_CALLBACK(on_combo_changed), NULL);
+    gtk_box_pack_start(GTK_BOX(hbox_other), combo_music, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), hbox_other, FALSE, FALSE, 0);
 
     // --- separator ---
     gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 4);
@@ -609,6 +683,7 @@ int main(int argc, char** argv) {
     // slider = the mean, music moves it around that. strong effects hardly move
     gtk_grid_attach(GTK_GRID(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), 0, grid_row++, 3, 1);
     slider_swing = make_slider(sliders_box, "RISE AND FALL with the music (0 = flat)", 0.0, 1.0, 1.0, 0.01);
+    slider_cross = make_slider(sliders_box, "OTHER VIDEO (how much of the picture is the other one)", 0.0, 1.0, 0.5, 0.01);
 
     // --- the track ---
     track_area = gtk_drawing_area_new();
