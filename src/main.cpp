@@ -48,6 +48,29 @@ int mux_audio(const string& video, const string& audio_src, const string& out) {
     return WEXITSTATUS(status);
 }
 
+// shorter of the two videos, thats how long the output gets
+static float shorter_video(const string& a, const string& b) {
+    VideoProcessor va, vb;
+    if (!va.open(a) || !vb.open(b)) return 0;
+    double d = va.get_duration() < vb.get_duration() ? va.get_duration() : vb.get_duration();
+    cout << "[other] output will be " << d << "s" << endl;
+    return d;
+}
+
+// music from both = ffmpeg mixes them into a file first, we just use that one
+static string mix_music(const string& a, const string& b) {
+    string out = "mixed_music_tmp.m4a";
+    pid_t pid = fork();
+    if (pid == 0) {
+        execlp("ffmpeg", "ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", a.c_str(), "-i", b.c_str(),
+               "-filter_complex", "amix=inputs=2:duration=shortest", "-vn", "-c:a", "aac", out.c_str(), (char*)nullptr);
+        _exit(1);
+    }
+    int status;
+    waitpid(pid, &status, 0);
+    return out;
+}
+
 // atof stops at a comma, "0,5" would silently be 0
 static float parse_arg(const char* a) {
     string s = a;
@@ -63,6 +86,7 @@ int main(int argc, char** argv) {
     // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was
     string other_path = "";
     float cross_amount = 0.5f;
+    string music = "a";
     {
         int out = 1;
         for (int i = 1; i < argc; i++) {
@@ -70,6 +94,8 @@ int main(int argc, char** argv) {
                 other_path = argv[++i];
             } else if (string(argv[i]) == "--cross" && i + 1 < argc) {
                 cross_amount = parse_arg(argv[++i]);
+            } else if (string(argv[i]) == "--music" && i + 1 < argc) {
+                music = argv[++i];
             } else {
                 argv[out++] = argv[i];
             }
@@ -87,7 +113,12 @@ int main(int argc, char** argv) {
     if (string(argv[1]) == "--sections") {
         if (argc < 3) return 1;
         AudioAnalyzer song;
-        if (!song.load_from_video(argv[2])) return 1;
+        string song_path = argv[2];
+        if (!other_path.empty() && music == "b") song_path = other_path;
+        if (!other_path.empty() && music == "both") song_path = mix_music(argv[2], other_path);
+        if (!song.load(song_path)) return 1;
+        if (!other_path.empty()) song.limit_to(shorter_video(argv[2], other_path));
+        if (!other_path.empty() && music == "both") remove(song_path.c_str());
         song.analyze();
         print_sections(cut_song(&song, argv[2]));
         // quarter sec is plenty for drawing it
@@ -111,11 +142,24 @@ int main(int argc, char** argv) {
         use_embedded_audio = true;
     }
 
+    string mixed_file = "";
+    if (!other_path.empty() && music != "a") {
+        use_embedded_audio = false;
+        if (music == "b") {
+            audio_path = other_path;
+        } else {
+            mixed_file = mix_music(video_path, other_path);
+            audio_path = mixed_file;
+        }
+    }
+
     string basename = get_basename(video_path);
+    if (!other_path.empty()) basename += "_x_" + get_basename(other_path);
     string tmp_path = basename + "_munched_noaudio.mp4";
     string out_path = basename + "_munched.mp4";
 
     VideoMosher mosher;
+    if (!other_path.empty()) mosher.song_limit = shorter_video(video_path, other_path);
 
     cout << "initializing..." << endl;
 
@@ -211,6 +255,8 @@ int main(int argc, char** argv) {
         remove(tmp_path.c_str());
         cout << "output: " << out_path << endl;
     }
+
+    if (!mixed_file.empty()) remove(mixed_file.c_str());
 
     cout << "done!" << endl;
     return 0;

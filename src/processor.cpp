@@ -58,6 +58,7 @@ VideoMosher::VideoMosher() {
     last_treble = 0;
     glitch_left = 0;
     use_parts = false;
+    song_limit = 0;
     other = nullptr;
     other_eyes = nullptr;
     a_read = b_read = 0;
@@ -106,6 +107,7 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
         return false;
     }
 
+    audio->limit_to(song_limit);
     audio->analyze();
 
     beat_times = audio->get_beat_times();
@@ -138,6 +140,7 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     }
 
     cout << "[debug] analyzing beats..." << endl;
+    audio->limit_to(song_limit);
     audio->analyze();
 
     beat_times = audio->get_beat_times();
@@ -720,17 +723,12 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
                 break;
             }
             other_rgb = other->get_frame_rgb_sized(width, height);
-            if (!other_rgb) { cerr << "[other] null frame??" << endl; exit(1); }
             if (!other_eyes) {
                 other_eyes = new WarpEngine();
                 other_eyes->init(width, height, fps);
             }
             other_eyes->estimate_motion(other_rgb);
             warp->look_at_other(other_rgb, other_eyes, p.cross);
-            if (out_index % 60 == 0) {
-                cerr << "[other] frame " << out_index << " first bytes "
-                     << (int)other_rgb[0] << " " << (int)other_rgb[1] << " " << (int)other_rgb[2] << endl;
-            }
         }
         uint8_t* frame_data = video->get_frame_rgb();  // get RGB not YUV
 

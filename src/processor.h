@@ -39,6 +39,7 @@ public:
     bool init_with_embedded_audio(const std::string& video_path);  // use video's audio track
     bool process_video(const std::string& output_path, ProcessParams params);
     bool open_other(const std::string& path);  // second video, optional
+    float song_limit;  // seconds, 0 = whole thing
 
 private:
     // returns true if this frame landed on a beat

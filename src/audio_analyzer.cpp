@@ -52,6 +52,14 @@ static bool read_pcm(const string& path, vector<float>& out) {
     return !out.empty();
 }
 
+void AudioAnalyzer::limit_to(float seconds) {
+    size_t n = (size_t)(seconds * AUDIO_RATE);
+    if (seconds <= 0 || n >= samples.size()) return;
+    samples.resize(n);
+    duration = seconds;
+    cout << "[audio] only the first " << seconds << "s" << endl;
+}
+
 bool AudioAnalyzer::load(const string& path) {
     cout << "Loading audio: " << path << endl;
     if (!read_pcm(path, samples)) {

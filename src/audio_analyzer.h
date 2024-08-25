@@ -16,6 +16,7 @@ public:
 
     std::vector<float> get_beat_times() { return beat_times; }
     float get_duration() { return duration; }
+    void limit_to(float seconds);  // two videos: nothing after the shorter one matters
     float get_current_energy(float time);
     float get_bass(float time);    // kick drum curve, 0-1, snappy
     float get_treble(float time);  // hats/snare curve, 0-1, snappy
