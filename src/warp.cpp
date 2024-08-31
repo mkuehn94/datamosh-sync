@@ -75,6 +75,7 @@ WarpEngine::~WarpEngine() {
     free(luma); free(prev_luma); free(small); free(prev_small);
     free(canvas); free(canvas_tmp); free(prev_src);
     free(other_prev);
+    for (size_t i = 0; i < other_ring.size(); i++) free(other_ring[i]);
     free(recur_prev);
     free(hom_buf);
     free(hom_ref);
@@ -607,6 +608,14 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
         cout << "[warp] quake buffer: " << (cap * (long)size) / (1024 * 1024) << " MB" << endl;
     }
 
+    // other video gets a tape too so its layers are in the past as well
+    if (other_on() && (int)other_ring.size() < cap) {
+        other_ring.assign(cap, nullptr);
+        for (int i = 0; i < cap; i++) other_ring[i] = (uint8_t*)malloc(size);
+        cout << "[warp] another " << (cap * (long)size) / (1024 * 1024) << " MB for the other video" << endl;
+    }
+    if (other_on()) memcpy(other_ring[ring_pos], other_rgb, size);
+
     memcpy(ring_frames[ring_pos], data, size);
     int now = ring_pos;
     ring_pos = (ring_pos + 1) % cap;
@@ -715,6 +724,9 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
             if (back >= ring_count) back = ring_count - 1;
 
             const uint8_t* f = ring_frames[(now - back + cap * 2) % cap];
+            // every other sheet of time is the other video
+            int sheet = (int)(q * levels + 0.5f);
+            if (other_on() && sheet % 2 == 1) f = other_ring[(now - back + cap * 2) % cap];
 
             int sx0 = x0 + (int)ox[idx];
             int sy0 = y0 + (int)oy[idx];

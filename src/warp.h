@@ -95,6 +95,8 @@ private:
     WarpEngine* other_eyes;
     float other_amount;
     uint8_t* other_prev;
+    std::vector<uint8_t*> other_ring;  // quake tape of the other video
+    bool other_on() { return other_eyes && other_amount > 0.001f; }
     int other_bar, other_kicks;  // which chunks belong to it changes every few kicks
     std::vector<float> other_field;
     int other_field_bar;
