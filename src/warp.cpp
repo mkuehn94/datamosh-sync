@@ -376,7 +376,6 @@ void WarpEngine::make_other_field() {
         other_field[i] = (lower_bound(sorted.begin(), sorted.end(), f[i]) - sorted.begin()) / (float)(gx * gy);
     }
     other_field_bar = other_bar;
-    cerr << "[other] new blobs, bar " << other_bar << " frame " << frame_no << endl;
 }
 
 void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
