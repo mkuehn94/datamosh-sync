@@ -57,6 +57,7 @@ static string sections_for;     // which video they belong to
 static GtkWidget* sliders_box = nullptr;
 static bool track_ready = false;  // false = sliders moved since the last calculate
 static GtkWidget* btn_browse = nullptr;
+static GtkWidget* btn_browse2 = nullptr;
 static float playhead = -1;     // seconds, -1 = not rendering
 static float render_fps = 0;
 static pid_t child_pid = 0;
@@ -266,6 +267,7 @@ static void set_busy(bool busy) {
     gtk_widget_set_sensitive(entry_other, !busy);
     gtk_widget_set_sensitive(combo_music, !busy);
     gtk_widget_set_sensitive(btn_browse, !busy);
+    gtk_widget_set_sensitive(btn_browse2, !busy);
 }
 
 static void on_track_clicked(GtkWidget*, gpointer) {
@@ -628,7 +630,7 @@ int main(int argc, char** argv) {
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry_other), "other video (optional)...");
     g_signal_connect(entry_other, "changed", G_CALLBACK(on_path_changed), NULL);
     gtk_box_pack_start(GTK_BOX(hbox_other), entry_other, TRUE, TRUE, 0);
-    GtkWidget* btn_browse2 = gtk_button_new_with_label("Browse");
+    btn_browse2 = gtk_button_new_with_label("Browse");
     g_signal_connect(btn_browse2, "clicked", G_CALLBACK(on_other_chooser_clicked), window);
     gtk_box_pack_start(GTK_BOX(hbox_other), btn_browse2, FALSE, FALSE, 0);
     combo_music = gtk_combo_box_text_new();
