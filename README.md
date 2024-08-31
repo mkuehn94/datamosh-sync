@@ -174,7 +174,27 @@ terminal prints what really happened at the end, look for [swing]
 global slider RISE AND FALL, 0 = flat like before. on the command line its the very
 last arg, after the 13 parts ones. left out = 1
 
-## what it looks like
+## two videos at once
+
+```
+./datamosh-sync --other other.mp4 --music a --cross 0.5 video.mp4 "" 0 100 0 0 0 0 0.25 0.05 0 0 0 0 0 0
+```
+
+or in the gui, the second box. chunks of the picture stop being the first video and
+become the other one, with its motion, residuals and healing. the chunks are blobs
+of noise and change every 8 kicks
+
+- `--music` a, b or both. the track gets made from whatever you pick
+- `--cross` how much of the picture is the other video
+- output gets the slower fps of the two and stops at the shorter one. other video
+  gets cropped to the size of the first
+- about 1.6x slower
+
+keep rot low (.25 or so, not the .45 default) or it turns to mush and you cant tell
+theres two videos. only rot and warp do this so far, the other effects still
+only see the first video
+
+
 
 every effect alone at max, everything else off. 3 random 5 sec clips from a drone video,
 screenshot is the last frame of the clip unless it says otherwise. full size is 1440x1080, these are shrunk
