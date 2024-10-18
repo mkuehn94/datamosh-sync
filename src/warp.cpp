@@ -892,16 +892,8 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
             // live and not held, held was dead tiles. night video has way weaker
             // edges than the sunny one so they get pumped up to the same strength
             // or it just washes out. blobs decide where
-            // debug
-            if (bx == bw / 2 && by == bh / 2 && frame_no % 60 == 0) {
-                cerr << "[spectral] on=" << other_on() << " field=" << other_field.size()
-                     << " amount=" << amount << " frame " << frame_no << endl;
-            }
             if (other_on() && !other_field.empty()) {
                 int gi = min(gy - 1, y0 / BLOCK) * gx + min(gx - 1, x0 / BLOCK);
-                if (bx == bw / 2 && by == bh / 2 && frame_no % 60 == 0) {
-                    cerr << "  gi=" << gi << " val=" << other_field[gi] << " oc1=" << oc[1] << " c1=" << c[1] << " oc9=" << oc[9] << " c9=" << c[9] << endl;
-                }
                 if (other_field[gi] > 1.0f - amount) {
                     float ea = 0, eb = 0;
                     for (int i = 1; i < 64; i++) {
@@ -914,9 +906,13 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                     for (int v = 0; v < 8; v++) {
                         for (int u = 0; u < 8; u++) {
                             int i = v * 8 + u;
-                            m[i] = (u + v) > 1 ? oc[i] * pump : c[i];
+                            int keep = spectral_flip ? 0 : 1;
+                            m[i] = (u + v) > keep ? oc[i] * pump : c[i];
                         }
                     }
+                } else {
+                    // drop stale held values from when this block was in a blob
+                    for (int i = 0; i < 64; i++) m[i] = c[i];
                 }
             }
 
