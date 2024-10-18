@@ -294,8 +294,9 @@ void WarpEngine::update_sampler(const AudioFrame& a) {
     if (a.kick) groove_punch = 0.4f + 0.6f * a.hit;
     else groove_punch *= pow(0.02f, dt / 0.15f);
 
-    rec_x.push_back(mvx);
-    rec_y.push_back(mvy);
+    // two videos: tape the motion of the other one
+    rec_x.push_back(other_on() ? other_eyes->mvx : mvx);
+    rec_y.push_back(other_on() ? other_eyes->mvy : mvy);
     if (a.kick) {
         rec_kicks.push_back((int)rec_x.size() - 1);
         bar_kicks++;
@@ -906,7 +907,8 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                     for (int v = 0; v < 8; v++) {
                         for (int u = 0; u < 8; u++) {
                             int i = v * 8 + u;
-                            int keep = spectral_flip ? 0 : 1;
+                            // middle of the blob gets the coarse bands too
+                            int keep = other_field[gi] > 1.0f - amount * 0.5f ? 0 : 1;
                             m[i] = (u + v) > keep ? oc[i] * pump : c[i];
                         }
                     }
@@ -969,6 +971,7 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
             c.tiles = 1 + rand_r(&recur_seed) % 3;
             c.age = 0;
             c.life = 0.12f + rnd(&recur_seed) * amount * 0.9f;
+            c.from_other = other_on() && rnd(&recur_seed) < 0.6f;
             cells.push_back(c);
         }
         // the really big hits: whole frame goes for a moment
@@ -979,6 +982,7 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
             c.tiles = 2 + rand_r(&recur_seed) % 2;
             c.age = 0;
             c.life = 0.1f;
+            c.from_other = other_on();  // big one always, whole screen is the other place for a moment
             cells.push_back(c);
         }
     }
@@ -1003,12 +1007,13 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
 
                 int src = (sy * w + sx) * 3;
                 int dst = ((c.y + y) * w + c.x + x) * 3;
-                data[dst] = recur_prev[src];
-                data[dst+1] = recur_prev[src+1];
-                data[dst+2] = recur_prev[src+2];
-                canvas[dst] = recur_prev[src];
-                canvas[dst+1] = recur_prev[src+1];
-                canvas[dst+2] = recur_prev[src+2];
+                const uint8_t* from = c.from_other ? other_rgb : recur_prev;
+                data[dst] = from[src];
+                data[dst+1] = from[src+1];
+                data[dst+2] = from[src+2];
+                canvas[dst] = from[src];
+                canvas[dst+1] = from[src+1];
+                canvas[dst+2] = from[src+2];
             }
         }
         c.age += dt;
@@ -1067,6 +1072,28 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
         if (cell_n[i] > 0) cell_avg[i] = cell_sum[i] / cell_n[i];
     }
 
+    // two videos: steal the detail from over there. same grid of averages for it
+    vector<int> theirs_lum, theirs_avg;
+    if (other_on()) {
+        theirs_lum.resize(w * h);
+        vector<int> sum2(gw * gh, 0), n2(gw * gh, 0);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int i = y * w + x;
+                theirs_lum[i] = (other_rgb[i*3] + 2 * other_rgb[i*3+1] + other_rgb[i*3+2]) / 4;
+                int g = (y / cell) * gw + x / cell;
+                sum2[g] += theirs_lum[i];
+                n2[g]++;
+            }
+        }
+        theirs_avg.assign(gw * gh, 0);
+        for (int i = 0; i < gw * gh; i++) {
+            if (n2[i] > 0) theirs_avg[i] = sum2[i] / n2[i];
+        }
+    }
+    const vector<int>& from_lum = other_on() ? theirs_lum : lum;
+    const vector<int>& from_avg = other_on() ? theirs_avg : cell_avg;
+
     // pick new places. tries a few random spots and keeps the one with the
     // most going on, stealing from flat sky just gives you a blurry road
     if (a.kick || first) {
@@ -1085,7 +1112,7 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
                 float busy = 0;
                 for (int yy = sy; yy < sy + chunk && yy < h; yy += 4) {
                     for (int xx = sx; xx < sx + chunk && xx < w; xx += 4) {
-                        busy += abs(lum[yy * w + xx] - cell_avg[(yy / cell) * gw + xx / cell]);
+                        busy += abs(from_lum[yy * w + xx] - from_avg[(yy / cell) * gw + xx / cell]);
                     }
                 }
                 if (busy > best) {
@@ -1119,8 +1146,8 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
             int sy = (tex_off_y[ci] + (y - cy * chunk)) % h;
 
             int own_low = cell_avg[(y / cell) * gw + x / cell];
-            int src_low = cell_avg[(sy / cell) * gw + sx / cell];
-            int stolen = (int)((lum[sy * w + sx] - src_low) * gain);
+            int src_low = from_avg[(sy / cell) * gw + sx / cell];
+            int stolen = (int)((from_lum[sy * w + sx] - src_low) * gain);
 
             int dl = own_low + stolen - lum[y * w + x];
             int di = (y * w + x) * 3;

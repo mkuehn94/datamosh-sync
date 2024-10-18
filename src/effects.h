@@ -82,7 +82,8 @@ public:
     // the same frame from somewhere else. holes into the wrong reality
     void void_replace(uint8_t* data, int width, int height,
                       int tr, int tg, int tb, int tolerance,
-                      int off_x, int off_y, float amount);
+                      int off_x, int off_y, float amount,
+                      const uint8_t* window = nullptr);
 
 private:
     uint8_t* temp_buffer;

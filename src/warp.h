@@ -132,6 +132,7 @@ private:
         int x, y, cw, ch;
         int tiles;
         float age, life;
+        bool from_other;
     };
     std::vector<Cell> cells;
     uint8_t* recur_prev;

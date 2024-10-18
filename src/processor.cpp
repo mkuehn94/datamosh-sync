@@ -61,6 +61,7 @@ VideoMosher::VideoMosher() {
     song_limit = 0;
     other = nullptr;
     other_eyes = nullptr;
+    other_frame = nullptr;
     a_read = b_read = 0;
     swing_frames = 0;
     for (int i = 0; i < FX_COUNT; i++) swing_sum[i] = swing_sq[i] = 0;
@@ -432,7 +433,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         float void_amt = params.color_shift * (0.35f + 0.55f * energy);
         effects->void_replace(frame_data, width, height,
                               (int)void_r, (int)void_g, (int)void_b, tol,
-                              void_off_x, void_off_y, void_amt);
+                              void_off_x, void_off_y, void_amt, other_frame);
     }
 
     // 4. glitch bands - only on real energy peaks, the ONE corruption
@@ -550,7 +551,8 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         stuck_y = (rand() % range_y) / MACROBLOCK_SIZE * MACROBLOCK_SIZE;
         if (stuck_buf) free(stuck_buf);
         stuck_buf = (uint8_t*)malloc(stuck_w * stuck_h * 3);
-        effects->grab_rect(frame_data, width, height, stuck_buf,
+        // two videos: patch comes from the other one, a window frozen open
+        effects->grab_rect(other_frame ? other_frame : frame_data, width, height, stuck_buf,
                            stuck_x, stuck_y, stuck_w, stuck_h);
         // old shuffle slider (repurposed) = how long it stays stuck
         // these were frame counts from when everything was 30fps
@@ -723,6 +725,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
                 break;
             }
             other_rgb = other->get_frame_rgb_sized(width, height);
+            other_frame = other_rgb;
             if (!other_eyes) {
                 other_eyes = new WarpEngine();
                 other_eyes->init(width, height, fps);

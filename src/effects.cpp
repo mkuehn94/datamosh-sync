@@ -622,8 +622,10 @@ void EffectEngine::grab_rect(uint8_t* data, int width, int height,
 // a window into the road. the road becomes a window into a building
 void EffectEngine::void_replace(uint8_t* data, int width, int height,
                                 int tr, int tg, int tb, int tolerance,
-                                int off_x, int off_y, float amount) {
+                                int off_x, int off_y, float amount, const uint8_t* window) {
     if (amount <= 0.01f) return;
+    // window = second video. then the hole looks over there, otherwise into ourselves
+    const uint8_t* look = window ? window : data;
 
     int tol2 = tolerance * tolerance;
 
@@ -653,9 +655,9 @@ void EffectEngine::void_replace(uint8_t* data, int width, int height,
             // squared distance, no sqrt needed
             if (dr*dr + dg*dg + db*db < tol2) {
                 int src = (sy * width + sx) * 3;
-                data[idx+0] = (uint8_t)(data[idx+0] * (1.0f - amount) + data[src+0] * amount);
-                data[idx+1] = (uint8_t)(data[idx+1] * (1.0f - amount) + data[src+1] * amount);
-                data[idx+2] = (uint8_t)(data[idx+2] * (1.0f - amount) + data[src+2] * amount);
+                data[idx+0] = (uint8_t)(data[idx+0] * (1.0f - amount) + look[src+0] * amount);
+                data[idx+1] = (uint8_t)(data[idx+1] * (1.0f - amount) + look[src+1] * amount);
+                data[idx+2] = (uint8_t)(data[idx+2] * (1.0f - amount) + look[src+2] * amount);
             }
         }
     }

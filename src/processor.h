@@ -58,6 +58,7 @@ private:
     VideoProcessor* video;
     VideoProcessor* other;     // second video or null
     WarpEngine* other_eyes;    // only here to measure the motion of the other video
+    uint8_t* other_frame;      // this frame of it, already the right size
     long a_read, b_read;
     bool catch_up(VideoProcessor* v, long& read, double src_fps, long frame_index, double out_fps);
     AudioAnalyzer* audio;
