@@ -884,7 +884,38 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                         // never quantize DC or the blocks flash
                         float q = 1.0f + f * 3.0f * crush;
                         m[i] = i == 0 ? c[i] : floor(c[i] / q + 0.5f) * q * gain;
-                        if (other_on() && i != 0) m[i] = oc[i];
+                    }
+                }
+            }
+
+            // two videos: the edges of the other one on the brightness of this one.
+            // live and not held, held was dead tiles. night video has way weaker
+            // edges than the sunny one so they get pumped up to the same strength
+            // or it just washes out. blobs decide where
+            // debug
+            if (bx == bw / 2 && by == bh / 2 && frame_no % 60 == 0) {
+                cerr << "[spectral] on=" << other_on() << " field=" << other_field.size()
+                     << " amount=" << amount << " frame " << frame_no << endl;
+            }
+            if (other_on() && !other_field.empty()) {
+                int gi = min(gy - 1, y0 / BLOCK) * gx + min(gx - 1, x0 / BLOCK);
+                if (bx == bw / 2 && by == bh / 2 && frame_no % 60 == 0) {
+                    cerr << "  gi=" << gi << " val=" << other_field[gi] << " oc1=" << oc[1] << " c1=" << c[1] << " oc9=" << oc[9] << " c9=" << c[9] << endl;
+                }
+                if (other_field[gi] > 1.0f - amount) {
+                    float ea = 0, eb = 0;
+                    for (int i = 1; i < 64; i++) {
+                        ea += c[i] * c[i];
+                        eb += oc[i] * oc[i];
+                    }
+                    float pump = sqrt((ea + 200.0f) / (eb + 200.0f));
+                    if (pump > 5.0f) pump = 5.0f;
+                    if (pump < 1.0f) pump = 1.0f;
+                    for (int v = 0; v < 8; v++) {
+                        for (int u = 0; u < 8; u++) {
+                            int i = v * 8 + u;
+                            m[i] = (u + v) > 1 ? oc[i] * pump : c[i];
+                        }
                     }
                 }
             }
