@@ -839,7 +839,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
 
     #pragma omp parallel for schedule(dynamic, 8)
     for (int by = 0; by < bh; by++) {
-        float px[64], c[64], res[64];
+        float px[64], c[64], res[64], opx[64], oc[64];
         for (int bx = 0; bx < bw; bx++) {
             float* m = &coef[(by * bw + bx) * 64];
             int x0 = bx * 8, y0 = by * 8;
@@ -851,6 +851,17 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                 }
             }
             dct8(px, c);
+
+            // same dct for the other video
+            if (other_on()) {
+                for (int y = 0; y < 8; y++) {
+                    const uint8_t* p = other_rgb + ((y0 + y) * w + x0) * 3;
+                    for (int x = 0; x < 8; x++) {
+                        opx[y * 8 + x] = (p[x*3] + 2 * p[x*3+1] + p[x*3+2]) * 0.25f - 128.0f;
+                    }
+                }
+                dct8(opx, oc);
+            }
 
             // 6x6 chunks of 8x8 blocks grab together. per block or per
             // coefficient was just noise, looked like pebbled glass. a
@@ -873,6 +884,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                         // never quantize DC or the blocks flash
                         float q = 1.0f + f * 3.0f * crush;
                         m[i] = i == 0 ? c[i] : floor(c[i] / q + 0.5f) * q * gain;
+                        if (other_on() && i != 0) m[i] = oc[i];
                     }
                 }
             }
