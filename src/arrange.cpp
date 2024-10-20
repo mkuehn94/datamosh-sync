@@ -22,6 +22,26 @@ const char* role_name(int role) {
     return names[role];
 }
 
+float dimension_at(const Section& s, float time, float cross) {
+    float f = (time - s.start) / (s.end - s.start);
+    if (f < 0) f = 0;
+    if (f > 1) f = 1;
+    float d;
+    switch (s.role) {
+        case ROLE_LEADIN:    d = 0.25f + 0.35f * f; break;  // first small cracks
+        case ROLE_BUILD:     d = 0.3f + 1.0f * f; break;    // keeps opening
+        case ROLE_BREATH:    d = 0; break;                  // nothing. clean
+        case ROLE_DROP:      d = 0.35f; break;              // the world just flipped, let it be that
+        case ROLE_CLIMAX:    d = 1.7f; break;               // only place they really merge
+        case ROLE_BREAKDOWN: d = 0.3f; break;
+        case ROLE_AFTER:     d = 1.2f - 0.7f * f; break;
+        default:             d = 0.5f + 0.6f * s.music; break;
+    }
+    d *= cross;
+    if (d > 0.6f) d = 0.6f;
+    return d;
+}
+
 float hardness_at(const Section& s, float time) {
     float f = (time - s.start) / (s.end - s.start);
     if (f < 0) f = 0;

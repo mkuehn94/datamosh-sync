@@ -352,13 +352,14 @@ void WarpEngine::look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amoun
 void WarpEngine::make_other_field() {
     vector<float> f(gx * gy), t(gx * gy);
     for (int i = 0; i < gx * gy; i++) f[i] = rnd(&other_seed);
-    for (int pass = 0; pass < 3; pass++) {
+    for (int pass = 0; pass < 4; pass++) {
         for (int by = 0; by < gy; by++) {
             for (int bx = 0; bx < gx; bx++) {
                 float s = 0;
                 int n = 0;
-                for (int j = max(0, by - 3); j <= min(gy - 1, by + 3); j++) {
-                    for (int i = max(0, bx - 3); i <= min(gx - 1, bx + 3); i++) {
+                // big radius, a few big blobs and not many small holes
+                for (int j = max(0, by - 8); j <= min(gy - 1, by + 8); j++) {
+                    for (int i = max(0, bx - 8); i <= min(gx - 1, bx + 8); i++) {
                         s += f[j * gx + i];
                         n++;
                     }
@@ -368,8 +369,6 @@ void WarpEngine::make_other_field() {
         }
         f = t;
     }
-    // little bit of the raw noise back on so the edges arent so smooth
-    for (int i = 0; i < gx * gy; i++) f[i] += (rnd(&other_seed) - 0.5f) * 0.02f;
 
     vector<float> sorted = f;
     sort(sorted.begin(), sorted.end());
@@ -392,7 +391,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
     if (groove > 0.01f) update_sampler(a);
 
     // other video on: has to run even with rot at 0 or nothing of it ever shows
-    if (rot < 0.01f && warp < 0.01f && groove < 0.01f && !other_eyes) {
+    if (rot < 0.01f && warp < 0.01f && groove < 0.01f && !other_on()) {
         memcpy(prev_src, data, size);
         canvas_ready = false;  // next time it starts rotting from the picture of THAT moment
         return;

@@ -455,6 +455,13 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         }
     }
 
+    // every drop flips which video is the main one
+    int world = 0;
+    for (size_t i = 0; i < out.size(); i++) {
+        if (out[i].role == ROLE_DROP && (i == 0 || out[i-1].role != ROLE_DROP)) world = !world;
+        out[i].world = world;
+    }
+
     cout << "[parts] " << out.size() << " sections, " << cuts << " hard cuts in the video" << endl;
     return out;
 }
@@ -490,7 +497,7 @@ void print_sections(const vector<Section>& sections) {
         const Section& s = sections[i];
         printf("SECTION %.3f %.3f", s.start, s.end);
         for (int f = 0; f < F_COUNT; f++) printf(" %.4f", s.feat[f]);
-        printf(" %d %.3f %.3f %.3f", s.role, s.hard_start, s.hard_end, s.music);
+        printf(" %d %.3f %.3f %.3f %d", s.role, s.hard_start, s.hard_end, s.music, s.world);
         printf("\n");
     }
     fflush(stdout);

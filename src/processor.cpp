@@ -62,6 +62,7 @@ VideoMosher::VideoMosher() {
     other = nullptr;
     other_eyes = nullptr;
     other_frame = nullptr;
+    dim_punch = 0;
     a_read = b_read = 0;
     swing_frames = 0;
     for (int i = 0; i < FX_COUNT; i++) swing_sum[i] = swing_sq[i] = 0;
@@ -327,6 +328,18 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         if (b > af.hit) af.hit = b;
     }
     af.cut = warp->scene_cut();
+
+    // how much of the other world right now. section says the base, kicks rip it open
+    // and it closes again
+    if (other) {
+        const Section* ds = section_at(sections, time);
+        if (af.kick) dim_punch = 0.4f + 0.6f * af.hit;
+        else dim_punch *= pow(0.05f, 1.0f / fps / 0.3f);
+        float dim = ds ? dimension_at(*ds, time, slider_params.cross) : slider_params.cross;
+        // breath stays clean no matter how hard the kick is
+        if (dim > 0) dim += dim_punch * slider_params.cross * 0.5f;
+        warp->look_at_other(other_frame, other_eyes, dim);
+    }
     last_on_beat = on_beat;
 
     // hats + snares, treble curve jumping up. same idea as the kick but for the top end
@@ -669,6 +682,8 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
         used[i] = amounts[i] > 0.01f;
         if (used[i] && p.parts[i] < 0.995f) use_parts = true;
     }
+    // two videos always needs to know the song, for the worlds
+    if (other) use_parts = true;
     if (use_parts) {
         sections = cut_song(audio, source_path);
         assign_parts(sections, p.parts, used, amounts, p.jpeg_quality);
@@ -729,15 +744,26 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
                 break;
             }
             other_rgb = other->get_frame_rgb_sized(width, height);
-            other_frame = other_rgb;
             if (!other_eyes) {
                 other_eyes = new WarpEngine();
                 other_eyes->init(width, height, fps);
             }
-            other_eyes->estimate_motion(other_rgb);
-            warp->look_at_other(other_rgb, other_eyes, p.cross);
         }
         uint8_t* frame_data = video->get_frame_rgb();  // get RGB not YUV
+
+        // world flipped? then the other one is the main video and everything just
+        // swaps. first frame after looks like a scene cut to the motion search, and
+        // the rot treats that like a dropped keyframe. thats the hit
+        if (other) {
+            const Section* now_s = section_at(sections, time);
+            if (now_s && now_s->world == 1) {
+                uint8_t* t = frame_data;
+                frame_data = other_rgb;
+                other_rgb = t;
+            }
+            other_frame = other_rgb;
+            other_eyes->estimate_motion(other_rgb);
+        }
 
         if (frame_data && width > 0 && height > 0) {
             bool beat = process_frame(frame_data, width, height, time);

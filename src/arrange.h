@@ -33,11 +33,15 @@ struct Section {
     float music;                // how intense is the song right here, 0-1
     float fx_scale[FX_COUNT];   // effect too violent for this moment gets turned down
     float fx_aggro[FX_COUNT];   // how violent it really ends up, 0-1. the track draws this
+    int world;                  // two videos: 0 = first one is the main one, 1 = the other
 };
 
 const char* fx_name(int fx);
 const char* role_name(int role);
 float hardness_at(const Section& s, float time);
+// two videos: how much of the other world tears in right now. one world at a time,
+// 50/50 all the time you just dont know where you are
+float dimension_at(const Section& s, float time, float cross);
 float aggression(int fx, float amount, float void_tol);
 // the slider is the mean, the music moves it around that. z = how intense right
 // now, in standard deviations, swing = the global rise and fall slider
