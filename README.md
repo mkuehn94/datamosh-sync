@@ -190,9 +190,27 @@ of noise and change every 8 kicks
   gets cropped to the size of the first
 - about 1.6x slower
 
+every effect is in on it now:
+
+- ROT / WARP: chunks move and heal like the other video
+- TIME QUAKE: every other sheet of time is the other video, shockwaves tear holes
+- SPECTRAL LAG: their shapes in our colors in the blobs, edges like chalk around them.
+  look at it full size, half of it doesnt show on a thumbnail
+- TEXTURE SWAP: wearing the surfaces of the other video
+- HALL OF MIRRORS: moving things from BOTH get stamped on the frozen world
+- RECURSION: tiny copies are often the other video, big hits the whole screen
+- VOID: the sky and whatever else got keyed out is a window to the other video
+- STUCK: frozen window into the other video
+- MOTION SAMPLER: tapes the motion of the other video
+
 keep rot low (.25 or so, not the .45 default) or it turns to mush and you cant tell
-theres two videos. only rot and warp do this so far, the other effects still
-only see the first video
+theres two videos. the track doesnt control the blobs yet, they stay on all song
+even in the breath before a drop
+
+```
+# all of it, arranged
+./datamosh-sync --other other.mp4 --music a --cross 0.35 video.mp4 "" 0.5 30 0.2 0.7 0.5 0.6 0.25 0.15 0.35 0.6 0.2 0.5 0.6 0.5  0.25 0.2 0.25 0.15 0.3 0.3 0.2 0.25 0.25 0.2 0.2 0.2 0.25 1
+```
 
 
 
