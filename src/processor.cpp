@@ -243,7 +243,10 @@ void VideoMosher::play_section(float time) {
     if (s->on[FX_QUAKE] && !fx_was_on[FX_QUAKE]) warp->wake_quake();
     if (s->on[FX_SPECTRAL] && !fx_was_on[FX_SPECTRAL]) warp->wake_spectral();
     if (s->on[FX_RECURSION] && !fx_was_on[FX_RECURSION]) warp->wake_recursion();
-    if (s->on[FX_HOM] && !fx_was_on[FX_HOM]) warp->wake_mirrors();
+    if (s->on[FX_HOM] && !fx_was_on[FX_HOM]) {
+        warp->wake_mirrors();
+        if (other_eyes) other_eyes->wake_mirrors();  // or its background guess goes stale
+    }
     if (s->on[FX_BLUR] && !fx_was_on[FX_BLUR] && ghost_buf) memset(ghost_buf, 0, ghost_buf_size);
 
     for (int i = 0; i < FX_COUNT; i++) fx_was_on[i] = s->on[i];
