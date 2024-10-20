@@ -912,6 +912,13 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                             m[i] = (u + v) > keep ? oc[i] * pump : c[i];
                         }
                     }
+                    // the block average IS the picture from any distance, everything
+                    // above is only stuff inside 8 pixels. so middle of the blob needs
+                    // their brightness too or it stays our picture with scratches on it.
+                    // color stays ours, their shapes in our colors
+                    if (other_field[gi] > 1.0f - amount * 0.5f) {
+                        m[0] = c[0] * 0.25f + oc[0] * 0.75f;
+                    }
                 } else {
                     // drop stale held values from when this block was in a blob
                     for (int i = 0; i < 64; i++) m[i] = c[i];
@@ -1170,6 +1177,12 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
 // doing (fit a flat plane through all the vectors, x and y separately), then
 // only stuff that moves DIFFERENT from that counts as an object
 
+// just run the whole thing on a throwaway copy, only want hom_stamped out of it.
+void WarpEngine::find_mirror_objects(const uint8_t* rgb, float amount, const AudioFrame& a) {
+    vector<uint8_t> copy(rgb, rgb + w * h * 3);
+    hall_of_mirrors(copy.data(), amount, a);
+}
+
 void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& a) {
     if (amount < 0.01f) return;
 
@@ -1185,6 +1198,7 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         memcpy(hom_buf, data, size);
         memcpy(hom_ref, luma, w * h);
         hom_age.assign(cw * ch, 0.0f);
+        hom_stamped.assign(w * h, 0);
         return;
     }
 
@@ -1326,7 +1340,9 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
             bool in_grown = y / BLOCK < gy && x / BLOCK < gx && grown[gb];
             int diff = abs(luma[i] - hom_ref_tmp[i]);
 
+            hom_stamped[i] = 0;
             if (in_grown && diff > 18) {
+                hom_stamped[i] = 1;
                 hom_buf[i*3] = data[i*3];
                 hom_buf[i*3+1] = data[i*3+1];
                 hom_buf[i*3+2] = data[i*3+2];
@@ -1336,6 +1352,17 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
             } else {
                 hom_ref[i] = (hom_ref_tmp[i] * 4 + luma[i]) / 5;
             }
+        }
+    }
+
+    // two videos: their moving things get stamped onto OUR frozen world too
+    if (other_on() && other_eyes->hom_stamped.size() == (size_t)(w * h)) {
+        const vector<char>& their = other_eyes->hom_stamped;
+        for (int i = 0; i < w * h; i++) {
+            if (!their[i]) continue;
+            hom_buf[i*3] = other_rgb[i*3];
+            hom_buf[i*3+1] = other_rgb[i*3+1];
+            hom_buf[i*3+2] = other_rgb[i*3+2];
         }
     }
 

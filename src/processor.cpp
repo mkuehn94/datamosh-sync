@@ -507,6 +507,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     warp->texture_swap(frame_data, params.texswap, af);
     warp->spectral_lag(frame_data, params.spectral, af);
     warp->time_quake(frame_data, params.quake, af);
+    if (other_eyes && other_frame) other_eyes->find_mirror_objects(other_frame, params.hom, af);
     warp->hall_of_mirrors(frame_data, params.hom, af);
 
     // stash this frame in history for future echoes

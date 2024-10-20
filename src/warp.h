@@ -37,6 +37,7 @@ public:
     void block_recursion(uint8_t* data, float amount, const AudioFrame& a);
     void texture_swap(uint8_t* data, float amount, const AudioFrame& a);
     void hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& a);
+    void find_mirror_objects(const uint8_t* rgb, float amount, const AudioFrame& a);  // for the other video
     void time_quake(uint8_t* data, float amount, const AudioFrame& a);
     void spectral_lag(uint8_t* data, float amount, const AudioFrame& a);
 
@@ -149,6 +150,7 @@ private:
     uint8_t* hom_ref;               // guess of what the world looks like without the objects
     uint8_t* hom_ref_tmp;
     std::vector<float> hom_age;     // per chunk, how long since it was cleared
+    std::vector<char> hom_stamped;  // this frame, which pixels counted as an object
     unsigned hom_seed;
 };
 
