@@ -125,7 +125,7 @@ static void parse_section_line(const char* line) {
     Section s;
     gchar** w = g_strsplit(line, " ", -1);
     int n = g_strv_length(w);
-    if (n == 2 + 1 + F_COUNT + 4) {
+    if (n == 2 + 1 + F_COUNT + 5) {
         s.start = g_ascii_strtod(w[1], nullptr);
         s.end = g_ascii_strtod(w[2], nullptr);
         for (int f = 0; f < F_COUNT; f++) s.feat[f] = g_ascii_strtod(w[3 + f], nullptr);
@@ -133,6 +133,7 @@ static void parse_section_line(const char* line) {
         s.hard_start = g_ascii_strtod(w[4 + F_COUNT], nullptr);
         s.hard_end = g_ascii_strtod(w[5 + F_COUNT], nullptr);
         s.music = g_ascii_strtod(w[6 + F_COUNT], nullptr);
+        s.world = atoi(w[7 + F_COUNT]);
         for (int i = 0; i < FX_COUNT; i++) s.on[i] = false;
         sections.push_back(s);
     }
@@ -355,7 +356,9 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
 static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
     int W = gtk_widget_get_allocated_width(area);
     int H = gtk_widget_get_allocated_height(area);
-    const int LEFT = 80, RIGHT = 88, TOP = 44;
+    // two videos: extra row on top, which world + how far the other one is open
+    bool two = strlen(gtk_entry_get_text(GTK_ENTRY(entry_other))) > 0;
+    const int LEFT = 80, RIGHT = 88, TOP = two ? 62 : 44;
     int rowh = (H - TOP - 14) / FX_COUNT;
 
     cairo_set_source_rgb(cr, 0.07, 0.07, 0.09);
@@ -393,10 +396,10 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
     };
     for (size_t i = 0; i < sections.size(); i++) {
         const Section& s = sections[i];
-        float bar = (TOP - 4) * (0.15f + 0.85f * s.feat[F_ENERGY]);
+        float bar = 40 * (0.15f + 0.85f * s.feat[F_ENERGY]);
         const double* c = role_color[s.role];
         cairo_set_source_rgb(cr, c[0], c[1], c[2]);
-        cairo_rectangle(cr, X_OF(s.start), TOP - 2 - bar, X_OF(s.end) - X_OF(s.start) - 1, bar);
+        cairo_rectangle(cr, X_OF(s.start), 42 - bar, X_OF(s.end) - X_OF(s.start) - 1, bar);
         cairo_fill(cr);
     }
     cairo_set_font_size(cr, 10);
@@ -414,13 +417,36 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
         }
         last_role = s.role;
     }
+    if (two) {
+        float cross = gtk_range_get_value(GTK_RANGE(slider_cross));
+        for (size_t i = 0; i < sections.size(); i++) {
+            const Section& s = sections[i];
+            if (s.world == 0) cairo_set_source_rgb(cr, 0.75, 0.6, 0.2);
+            else cairo_set_source_rgb(cr, 0.15, 0.55, 0.7);
+            cairo_rectangle(cr, X_OF(s.start), TOP - 16, X_OF(s.end) - X_OF(s.start), 14);
+            cairo_fill(cr);
+        }
+        // how far its open
+        cairo_set_source_rgb(cr, 1, 1, 1);
+        cairo_set_line_width(cr, 1);
+        for (size_t i = 0; i < sections.size(); i++) {
+            const Section& s = sections[i];
+            cairo_move_to(cr, X_OF(s.start), TOP - 3 - 11 * dimension_at(s, s.start, cross) / 0.6);
+            cairo_line_to(cr, X_OF(s.end), TOP - 3 - 11 * dimension_at(s, s.end - 0.001f, cross) / 0.6);
+        }
+        cairo_stroke(cr);
+        cairo_set_font_size(cr, 10);
+        cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+        cairo_move_to(cr, 4, TOP - 5);
+        cairo_show_text(cr, "which world");
+    }
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_set_line_width(cr, 1.5);
     for (size_t i = 0; i < sections.size(); i++) {
         const Section& s = sections[i];
-        cairo_move_to(cr, X_OF(s.start), TOP - 2 - (TOP - 6) * s.hard_start);
-        cairo_line_to(cr, X_OF(s.end), TOP - 2 - (TOP - 6) * s.hard_end);
+        cairo_move_to(cr, X_OF(s.start), 42 - 38 * s.hard_start);
+        cairo_line_to(cr, X_OF(s.end), 42 - 38 * s.hard_end);
     }
     cairo_stroke(cr);
     cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
@@ -685,7 +711,7 @@ int main(int argc, char** argv) {
     // slider = the mean, music moves it around that. strong effects hardly move
     gtk_grid_attach(GTK_GRID(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), 0, grid_row++, 3, 1);
     slider_swing = make_slider(sliders_box, "RISE AND FALL with the music (0 = flat)", 0.0, 1.0, 1.0, 0.01);
-    slider_cross = make_slider(sliders_box, "OTHER VIDEO (how much of the picture is the other one)", 0.0, 1.0, 0.5, 0.01);
+    slider_cross = make_slider(sliders_box, "DIMENSION (how far the other world tears in)", 0.0, 1.0, 0.35, 0.01);
 
     // --- the track ---
     track_area = gtk_drawing_area_new();
