@@ -686,6 +686,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     if (other) use_parts = true;
     if (use_parts) {
         sections = cut_song(audio, source_path);
+        arrange_two_videos(other != nullptr);
         assign_parts(sections, p.parts, used, amounts, p.jpeg_quality);
         print_track(sections);
         if (used[FX_QUAKE]) warp->keep_quake_tape();

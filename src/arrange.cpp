@@ -106,13 +106,38 @@ static const float violence[FX_COUNT][5] = {
     /* mirrors   */ {0.00f, 0.48f, 0.45f, 0.48f, 0.48f},
 };
 
+// same thing measured again with a second video, 2 clips. quake is at the ceiling
+// from .5 up, it tears between two cities now. void almost double, spectral up, sampler
+// down because the motion of the other video is smoother than the drone
+static const float violence_two[FX_COUNT][5] = {
+    /* glitch    */ {0.00f, 0.12f, 0.13f, 0.16f, 0.18f},
+    /* blur      */ {0.00f, 0.07f, 0.10f, 0.14f, 0.18f},
+    /* void      */ {0.00f, 0.09f, 0.14f, 0.19f, 0.24f},
+    /* stuck     */ {0.13f, 0.13f, 0.13f, 0.13f, 0.13f},
+    /* beat sync */ {0.00f, 0.31f, 0.42f, 0.51f, 0.58f},
+    /* rot       */ {0.00f, 0.08f, 0.14f, 0.21f, 0.31f},
+    /* warp      */ {0.00f, 0.15f, 0.25f, 0.36f, 0.45f},
+    /* quake     */ {0.00f, 0.42f, 1.00f, 1.00f, 1.00f},
+    /* spectral  */ {0.00f, 0.19f, 0.32f, 0.42f, 0.50f},
+    /* sampler   */ {0.00f, 0.11f, 0.19f, 0.26f, 0.31f},
+    /* texswap   */ {0.00f, 0.26f, 0.40f, 0.50f, 0.52f},
+    /* recursion */ {0.00f, 0.08f, 0.18f, 0.31f, 0.45f},
+    /* mirrors   */ {0.00f, 0.61f, 0.50f, 0.53f, 0.53f},
+};
+static bool using_two = false;
+
+void arrange_two_videos(bool two) {
+    using_two = two;
+}
+
 float aggression(int fx, float amount, float void_tol) {
     if (amount <= 0) return 0;
     if (amount > 1) amount = 1;
     float pos = amount * 4;
     int i = (int)pos;
     if (i > 3) i = 3;
-    float a = violence[fx][i] + (violence[fx][i+1] - violence[fx][i]) * (pos - i);
+    const float (*tab)[5] = using_two ? violence_two : violence;
+    float a = tab[fx][i] + (tab[fx][i+1] - tab[fx][i]) * (pos - i);
     // low tolerance = way bigger voids. measured 0 against 65
     if (fx == FX_VOID) a *= 1.0f + 1.16f * (65.0f - void_tol) / 65.0f;
     return a > 1 ? 1 : a;

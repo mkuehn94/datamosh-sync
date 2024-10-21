@@ -43,6 +43,7 @@ float hardness_at(const Section& s, float time);
 // 50/50 all the time you just dont know where you are
 float dimension_at(const Section& s, float time, float cross);
 float aggression(int fx, float amount, float void_tol);
+void arrange_two_videos(bool two);  // effects are more violent with two, other table
 // the slider is the mean, the music moves it around that. z = how intense right
 // now, in standard deviations, swing = the global rise and fall slider
 float fx_spread(int fx);

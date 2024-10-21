@@ -94,6 +94,7 @@ static void rearrange() {
     }
     if (!slider_hom) return;
     read_used(used, amounts);
+    arrange_two_videos(strlen(gtk_entry_get_text(GTK_ENTRY(entry_other))) > 0);
     assign_parts(sections, parts, used, amounts, gtk_range_get_value(GTK_RANGE(slider_jpeg)));
     gtk_widget_queue_draw(track_area);
 }
