@@ -46,6 +46,7 @@ GtkWidget* slider_hom;
 
 GtkWidget* btn_process;
 GtkWidget* btn_track;
+GtkWidget* btn_auto;
 GtkWidget* track_area;
 GtkWidget* slider_parts[FX_COUNT];
 
@@ -264,12 +265,43 @@ static bool calculate_track(const char* input) {
 static void set_busy(bool busy) {
     gtk_widget_set_sensitive(btn_process, !busy);
     gtk_widget_set_sensitive(btn_track, !busy);
+    gtk_widget_set_sensitive(btn_auto, !busy);
     gtk_widget_set_sensitive(sliders_box, !busy);  // or the track lies about the running render
     gtk_widget_set_sensitive(entry_input, !busy);
     gtk_widget_set_sensitive(entry_other, !busy);
     gtk_widget_set_sensitive(combo_music, !busy);
     gtk_widget_set_sensitive(btn_browse, !busy);
     gtk_widget_set_sensitive(btn_browse2, !busy);
+}
+
+// the AUTO button. finds the how much of the song values for you
+static void on_auto_clicked(GtkWidget*, gpointer) {
+    const char* input = gtk_entry_get_text(GTK_ENTRY(entry_input));
+    if (!input || input[0] == '\0') {
+        gtk_label_set_text(GTK_LABEL(label_status), "ERROR: no input file");
+        return;
+    }
+    set_busy(true);
+    string path = input;
+    if (!analyze_song(path.c_str())) {
+        if (!window_gone) set_busy(false);
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(label_status), "trying out a LOT of combinations, couple of seconds...");
+    while (gtk_events_pending()) gtk_main_iteration();
+
+    float parts[FX_COUNT], amounts[FX_COUNT];
+    bool used[FX_COUNT];
+    read_used(used, amounts);
+    arrange_two_videos(strlen(gtk_entry_get_text(GTK_ENTRY(entry_other))) > 0);
+    for (int i = 0; i < FX_COUNT; i++) parts[i] = gtk_range_get_value(GTK_RANGE(slider_parts[i]));
+    auto_parts(sections, parts, used, amounts, gtk_range_get_value(GTK_RANGE(slider_jpeg)));
+
+    // setting the sliders kicks the track out as outdated, calculate brings it back
+    for (int i = 0; i < FX_COUNT; i++) gtk_range_set_value(GTK_RANGE(slider_parts[i]), parts[i]);
+    calculate_track(path.c_str());
+    set_busy(false);
+    gtk_label_set_text(GTK_LABEL(label_status), "auto parts done, MOSH IT");
 }
 
 static void on_track_clicked(GtkWidget*, gpointer) {
@@ -726,6 +758,9 @@ int main(int argc, char** argv) {
     btn_track = gtk_button_new_with_label("CALCULATE TRACK");
     g_signal_connect(btn_track, "clicked", G_CALLBACK(on_track_clicked), NULL);
     gtk_box_pack_start(GTK_BOX(hbox_buttons), btn_track, FALSE, FALSE, 0);
+    btn_auto = gtk_button_new_with_label("AUTO PARTS");
+    g_signal_connect(btn_auto, "clicked", G_CALLBACK(on_auto_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(hbox_buttons), btn_auto, FALSE, FALSE, 0);
     btn_process = gtk_button_new_with_label("MOSH IT");
     // make it kinda big
     gtk_widget_set_size_request(btn_process, -1, 50);
