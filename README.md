@@ -180,12 +180,15 @@ last arg, after the 13 parts ones. left out = 1
 ./datamosh-sync --other other.mp4 --music a --cross 0.5 video.mp4 "" 0 100 0 0 0 0 0.25 0.05 0 0 0 0 0 0
 ```
 
-or in the gui, the second box. chunks of the picture stop being the first video and
-become the other one, with its motion, residuals and healing. the chunks are blobs
-of noise and change every 8 kicks
+or in the gui, the second box. it isnt 50/50, you always know which world youre in:
+one video is the main one and the other tears in as a few big rifts
 
+- `--cross` / DIMENSION slider: how far the other world tears in. 0 = never
+- kicks rip the rifts open, then they close again. the blobs change every 8 kicks
+- build opens them further and further, breath before a drop is totally clean
+- a DROP flips which video is the main one, the climax is the only place they
+  really merge. the row on top of the track shows which world, line = how far open
 - `--music` a, b or both. the track gets made from whatever you pick
-- `--cross` how much of the picture is the other video
 - output gets the slower fps of the two and stops at the shorter one. other video
   gets cropped to the size of the first
 - about 1.6x slower
@@ -204,8 +207,10 @@ every effect is in on it now:
 - MOTION SAMPLER: tapes the motion of the other video
 
 keep rot low (.25 or so, not the .45 default) or it turns to mush and you cant tell
-theres two videos. the track doesnt control the blobs yet, they stay on all song
-even in the breath before a drop
+theres two videos. quake can flip the whole picture to the other video for a moment
+even when the track says otherwise, i kept it
+
+two videos have their own violence table in src/arrange.cpp, they hit harder
 
 ```
 # all of it, arranged
