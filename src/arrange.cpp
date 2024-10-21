@@ -3,6 +3,8 @@
 #include "arrange.h"
 #include <cmath>
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 
@@ -434,4 +436,195 @@ const Section* section_at(const vector<Section>& sections, float time) {
         if (time < sections[i].end) return &sections[i];
     }
     return &sections.back();  // video a bit longer than the audio
+}
+
+static inline float rnd(unsigned* seed) {
+    return rand_r(seed) / (float)RAND_MAX;
+}
+
+// ===== the AUTO button =====
+// simulated annealing. pick a slider, nudge it, deal the whole track out again, see if
+// its better. sometimes keep it even if its worse so it doesnt get stuck on the first
+// hill it finds, less and less often as it "cools down"
+
+// how bad is a track, lower = better
+float track_cost(const vector<Section>& sections, const bool* used) {
+    float song = sections.back().end - sections[0].start;
+    float cost = 0;
+    float played[FX_COUNT] = {0};
+    float violent_time[FX_COUNT] = {0};
+    int toggles[FX_COUNT] = {0};
+
+    for (size_t i = 0; i < sections.size(); i++) {
+        const Section& s = sections[i];
+        float len = s.end - s.start;
+
+        // how wrecked should this be, NOT scaled to the budget like in polish(). the
+        // budget is the thing were looking for here
+        float want = 0.1f + 0.6f * s.music * s.music;
+        if (s.role == ROLE_BREATH) want = 0;
+        if (s.role == ROLE_DROP) want = 0.85f;
+        if (s.role == ROLE_CLIMAX) want = 0.9f;
+        if (s.role == ROLE_LEADIN) want = s.music * 0.8f;
+        if (s.role == ROLE_BREAKDOWN) want = 0.2f;
+
+        float clean = 1;
+        int n = 0;
+        float taste_sum = 0;
+        for (int fx = 0; fx < FX_COUNT; fx++) {
+            if (!s.on[fx]) continue;
+            clean *= 1.0f - s.fx_aggro[fx] * 0.7f;
+            n++;
+            played[fx] += len;
+            violent_time[fx] += len * s.fx_aggro[fx];
+            taste_sum += taste_score(fx, s);
+        }
+        float got = 1.0f - clean;
+        cost += len * (got - want) * (got - want) * 3.0f;
+
+        // too many at once = the just effects on top of each other thing
+        int limit = 1 + (int)(4.0f * s.music + 0.5f);
+        if (s.role == ROLE_DROP || s.role == ROLE_CLIMAX) limit = 8;
+        if (n > limit) cost += len * 0.02f * (n - limit) * (n - limit);
+        // loud part with nothing going on
+        if (n == 0 && s.role != ROLE_BREATH && s.music > 0.3f) cost += len * 0.1f;
+        // effects in places they dont like
+        cost -= len * 0.03f * taste_sum;
+
+        if (i > 0) {
+            int same = 0;
+            for (int fx = 0; fx < FX_COUNT; fx++) {
+                if (s.on[fx] != sections[i-1].on[fx]) toggles[fx]++;
+                else same++;
+            }
+            // exactly the same for two sections in a row gets boring
+            if (same == FX_COUNT && s.role != ROLE_CLIMAX) cost += 0.1f;
+        }
+    }
+    cost /= song;
+
+    for (int fx = 0; fx < FX_COUNT; fx++) {
+        if (!used[fx]) continue;
+        float frac = played[fx] / song;
+        // everybody gets to play but nobody all the time
+        if (frac < 0.08f) cost += (0.08f - frac) * 2.0f;
+        if (frac > 0.6f) cost += (frac - 0.6f) * 0.5f;
+        // everything gets a fair share, the more violent the less
+        float how_violent = played[fx] > 0 ? violent_time[fx] / played[fx] : 0;
+        float fair = 0.32f - 0.22f * how_violent;
+        cost += fabs(frac - fair) * 0.15f;
+        cost += toggles[fx] * 0.0015f;
+    }
+    return cost;
+}
+
+// box muller. c++11 has normal_distribution but then its not the same on every machine
+static float gauss(unsigned* seed) {
+    float u = rnd(seed), v = rnd(seed);
+    if (u < 0.0001f) u = 0.0001f;
+    return sqrt(-2.0f * log(u)) * cos(6.2831853f * v);
+}
+
+// one go of annealing from start[], best one ends up in out[]
+static float anneal_once(vector<Section>& sections, const float* start, float* out, const bool* used,
+                         const float* amounts, float void_tol, unsigned seed) {
+    float cur[FX_COUNT];
+    for (int i = 0; i < FX_COUNT; i++) {
+        cur[i] = start[i];
+        out[i] = cur[i];
+    }
+
+    assign_parts(sections, cur, used, amounts, void_tol);
+    float cur_cost = track_cost(sections, used);
+    float best_cost = cur_cost;
+
+    const int ROUNDS = 3000;
+    float temp = 0.01f;
+    for (int r = 0; r < ROUNDS; r++) {
+        int fx = rand_r(&seed) % FX_COUNT;
+        if (!used[fx]) continue;
+
+        float old = cur[fx];
+        float cool = 1.0f - (float)r / ROUNDS;
+        cur[fx] += gauss(&seed) * (0.03f + 0.12f * cool);
+        if (cur[fx] < 0.05f) cur[fx] = 0.05f;
+        if (cur[fx] > 0.9f) cur[fx] = 0.9f;
+
+        assign_parts(sections, cur, used, amounts, void_tol);
+        float c = track_cost(sections, used);
+
+        if (c < cur_cost || rnd(&seed) < exp((cur_cost - c) / temp)) {
+            cur_cost = c;
+            if (c < best_cost) {
+                best_cost = c;
+                for (int i = 0; i < FX_COUNT; i++) out[i] = cur[i];
+            }
+        } else {
+            cur[fx] = old;
+        }
+        temp *= 0.9985f;
+    }
+    return best_cost;
+}
+
+float auto_parts(vector<Section>& sections, float* parts, const bool* used,
+                 const float* amounts, float void_tol) {
+    float best[FX_COUNT];
+    float best_cost = 1e9f;
+    assign_parts(sections, parts, used, amounts, void_tol);
+    float start_cost = track_cost(sections, used);
+
+    // one run gets stuck in whatever valley it finds first. several runs from random
+    // places, keep the winner.
+    // NOT from the current sliders, then the answer depends on what you clicked before
+    unsigned seed = 4242;  // same song same sliders same answer
+    const int RESTARTS = 6;
+    for (int run = 0; run < RESTARTS; run++) {
+        float start[FX_COUNT], got[FX_COUNT];
+        for (int i = 0; i < FX_COUNT; i++) start[i] = 0.1f + 0.3f * rnd(&seed);
+        float c = anneal_once(sections, start, got, used, amounts, void_tol, seed + run * 7919);
+        printf("[auto] run %d: %.4f\n", run, c);
+        if (c < best_cost) {
+            best_cost = c;
+            for (int i = 0; i < FX_COUNT; i++) best[i] = got[i];
+        }
+    }
+
+    // round first, a tiny nudge can flip a whole section to a different effect
+    for (int i = 0; i < FX_COUNT; i++) best[i] = floor(best[i] * 100 + 0.5f) / 100;
+    assign_parts(sections, best, used, amounts, void_tol);
+    best_cost = track_cost(sections, used);
+
+    // annealing gets close, this walks the last bit. one slider at a time until
+    // nothing helps anymore
+    bool better = true;
+    for (int pass = 0; pass < 6 && better; pass++) {
+        better = false;
+        for (int fx = 0; fx < FX_COUNT; fx++) {
+            if (!used[fx]) continue;
+            static const float steps[4] = {0.03f, -0.03f, 0.01f, -0.01f};
+            for (int k = 0; k < 4; k++) {
+                float keep = best[fx];
+                best[fx] = floor((keep + steps[k]) * 100 + 0.5f) / 100;
+                if (best[fx] < 0.05f || best[fx] > 0.9f) { best[fx] = keep; continue; }
+                assign_parts(sections, best, used, amounts, void_tol);
+                float c = track_cost(sections, used);
+                if (c < best_cost - 0.00001f) {
+                    best_cost = c;
+                    better = true;
+                } else {
+                    best[fx] = keep;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < FX_COUNT; i++) {
+        if (used[i]) parts[i] = best[i];
+    }
+    assign_parts(sections, parts, used, amounts, void_tol);
+    float final_cost = track_cost(sections, used);
+    printf("[auto] cost %.4f -> %.4f\n", start_cost, final_cost);
+    fflush(stdout);
+    return final_cost;
 }

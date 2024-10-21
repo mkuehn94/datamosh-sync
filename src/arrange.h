@@ -51,6 +51,11 @@ float swung_value(int fx, float mean, float z, float swing);
 // amounts = the how hard sliders, stuck goes by the glitch slider
 void assign_parts(std::vector<Section>& sections, const float* parts, const bool* used,
                   const float* amounts, float void_tol);
+// the AUTO button. finds good "how much of the song" values for this song and these
+// how hard sliders. parts = where to start, gets overwritten. returns how bad it is
+float track_cost(const std::vector<Section>& sections, const bool* used);
+float auto_parts(std::vector<Section>& sections, float* parts, const bool* used,
+                 const float* amounts, float void_tol);
 const Section* section_at(const std::vector<Section>& sections, float time);
 
 #endif
