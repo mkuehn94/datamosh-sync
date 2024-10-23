@@ -136,6 +136,15 @@ then the track shows up. move a slider and its gone until you calculate again
 you didnt. while it renders a red line goes along and the names of whats playing
 go yellow
 
+or hit AUTO PARTS, it finds the values for you. simulated annealing: 6 runs of 3000
+tries each from random places, every try deals the whole track out and scores it
+(track_cost in src/arrange.cpp). how well the violence fits the music, too many effects
+at once, empty loud parts, effects where they dont fit, flickering, and everybody gets a
+fair share with the violent ones less. it looks at your how hard sliders so set those
+first. takes a few seconds and the window hangs meanwhile. same input = same answer.
+the score is just a set of rules, so it finds the best track by those, you can
+still move stuff afterwards
+
 on the command line they go after the other 14, same order as above but without
 void_tol:
 
