@@ -9,7 +9,6 @@
 #include "video_processor.h"
 #include "audio_analyzer.h"
 #include "processor.h"
-#include "song_sections.h"
 
 using namespace std;
 
