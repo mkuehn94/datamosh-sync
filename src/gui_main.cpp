@@ -93,7 +93,6 @@ static void rearrange() {
         if (!slider_parts[i]) return;  // still building the window
         parts[i] = gtk_range_get_value(GTK_RANGE(slider_parts[i]));
     }
-    if (!slider_hom) return;
     read_used(used, amounts);
     arrange_two_videos(strlen(gtk_entry_get_text(GTK_ENTRY(entry_other))) > 0);
     assign_parts(sections, parts, used, amounts, gtk_range_get_value(GTK_RANGE(slider_jpeg)));
@@ -161,10 +160,9 @@ static void on_backend_line(const char* line) {
 // -1 if it never ran or the window got closed
 static int run_backend(const vector<string>& args) {
     int fd[2];
-    if (pipe(fd) != 0) return -1;
+    pipe(fd);
 
     pid_t pid = fork();
-    if (pid < 0) return -1;
     if (pid == 0) {
         dup2(fd[1], 1);
         close(fd[0]);

@@ -24,10 +24,9 @@ AudioAnalyzer::~AudioAnalyzer() {
 // libav + resampling is a ton of code, ffmpeg can just pipe us raw floats
 static bool read_pcm(const string& path, vector<float>& out) {
     int fd[2];
-    if (pipe(fd) != 0) return false;
+    pipe(fd);
 
     pid_t pid = fork();
-    if (pid < 0) return false;
     if (pid == 0) {
         dup2(fd[1], 1);
         close(fd[0]);

@@ -40,8 +40,6 @@ int mux_audio(const string& video, const string& audio_src, const string& out) {
                "-loglevel", "error",
                (char*)nullptr);
         exit(1);  // execlp failed
-    } else if (pid < 0) {
-        return -1;  // fork failed
     }
     int status;
     waitpid(pid, &status, 0);

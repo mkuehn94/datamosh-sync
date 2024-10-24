@@ -25,10 +25,7 @@ bool VideoProcessor::open(const string& path) {
     }
 
     cout << "[vp] finding stream info..." << endl;
-    if (avformat_find_stream_info(fmt_ctx, nullptr) < 0) {
-        cerr << "Could not find stream info" << endl;
-        return false;
-    }
+    avformat_find_stream_info(fmt_ctx, nullptr);
 
     cout << "[vp] finding video stream..." << endl;
     // find video stream
@@ -47,11 +44,6 @@ bool VideoProcessor::open(const string& path) {
     // get codec
     AVCodecParameters* codecpar = fmt_ctx->streams[video_stream_idx]->codecpar;
     const AVCodec* codec = avcodec_find_decoder(codecpar->codec_id);
-    if (!codec) {
-        cerr << "Codec not found" << endl;
-        return false;
-    }
-
     codec_ctx = avcodec_alloc_context3(codec);
     avcodec_parameters_to_context(codec_ctx, codecpar);
 
@@ -154,8 +146,6 @@ uint8_t* VideoProcessor::get_frame_data() {
 }
 
 uint8_t* VideoProcessor::get_frame_rgb() {
-    if (!frame) return nullptr;
-
     // initialize converter if needed
     if (!sws_ctx) {
         sws_ctx = sws_getContext(
@@ -164,10 +154,6 @@ uint8_t* VideoProcessor::get_frame_rgb() {
             SWS_BILINEAR, nullptr, nullptr, nullptr
         );
 
-        if (!sws_ctx) {
-            cerr << "Failed to initialize swscale context" << endl;
-            return nullptr;
-        }
 
         // allocate RGB frame and buffer
         frame_rgb = av_frame_alloc();

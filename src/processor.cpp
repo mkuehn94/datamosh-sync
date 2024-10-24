@@ -832,24 +832,12 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
 bool VideoMosher::setup_encoder(const string& output_path, int width, int height, AVRational rate) {
     // create output context
     avformat_alloc_output_context2(&output_ctx, nullptr, nullptr, output_path.c_str());
-    if (!output_ctx) {
-        cerr << "Could not create output context" << endl;
-        return false;
-    }
     
     // find H264 encoder
     const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-    if (!codec) {
-        cerr << "H264 encoder not found" << endl;
-        return false;
-    }
     
     // create stream
     out_stream = avformat_new_stream(output_ctx, nullptr);
-    if (!out_stream) {
-        cerr << "Failed to create stream" << endl;
-        return false;
-    }
     
     // allocate encoder context
     enc_ctx = avcodec_alloc_context3(codec);
@@ -898,10 +886,7 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     }
     
     // write header
-    if (avformat_write_header(output_ctx, nullptr) < 0) {
-        cerr << "Error writing header" << endl;
-        return false;
-    }
+    avformat_write_header(output_ctx, nullptr);
     
     // setup frame for encoding
     enc_frame = av_frame_alloc();
@@ -936,8 +921,6 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
 }
 
 void VideoMosher::encode_frame(uint8_t* rgb_data) {
-    if (!enc_ctx || !enc_frame || !enc_sws_ctx) return;
-    
     int width = enc_ctx->width;
     int height = enc_ctx->height;
     
@@ -955,10 +938,6 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
     
     // send frame to encoder
     int ret = avcodec_send_frame(enc_ctx, enc_frame);
-    if (ret < 0) {
-        cerr << "Error sending frame to encoder" << endl;
-        return;
-    }
     
     // receive encoded packets
     AVPacket* pkt = av_packet_alloc();
