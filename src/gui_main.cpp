@@ -64,8 +64,7 @@ static float render_fps = 0;
 static pid_t child_pid = 0;
 static bool window_gone = false;
 
-// same list the backend makes in process_video. stuck goes by the glitch slider
-// because glitch is what triggers it
+// same as process_video!! keep in sync
 static void read_used(bool* used, float* a) {
     a[FX_GLITCH] = gtk_range_get_value(GTK_RANGE(slider_glitch));
     a[FX_BLUR] = gtk_range_get_value(GTK_RANGE(slider_mblur));
@@ -222,7 +221,6 @@ static void add_other_args(vector<string>& args, bool with_cross) {
 }
 
 static bool analyze_song(const char* input) {
-    // same video but other music or other second video = different song
     string key = string(input) + "|" + gtk_entry_get_text(GTK_ENTRY(entry_other)) + "|"
                + gtk_combo_box_get_active_id(GTK_COMBO_BOX(combo_music));
     if (sections_for == key && !sections.empty()) return true;
@@ -295,7 +293,6 @@ static void on_auto_clicked(GtkWidget*, gpointer) {
     for (int i = 0; i < FX_COUNT; i++) parts[i] = gtk_range_get_value(GTK_RANGE(slider_parts[i]));
     auto_parts(sections, parts, used, amounts, gtk_range_get_value(GTK_RANGE(slider_jpeg)));
 
-    // setting the sliders kicks the track out as outdated, calculate brings it back
     for (int i = 0; i < FX_COUNT; i++) gtk_range_set_value(GTK_RANGE(slider_parts[i]), parts[i]);
     calculate_track(path.c_str());
     set_busy(false);
@@ -457,7 +454,6 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
             cairo_rectangle(cr, X_OF(s.start), TOP - 16, X_OF(s.end) - X_OF(s.start), 14);
             cairo_fill(cr);
         }
-        // how far its open
         cairo_set_source_rgb(cr, 1, 1, 1);
         cairo_set_line_width(cr, 1);
         for (size_t i = 0; i < sections.size(); i++) {
@@ -509,8 +505,7 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
             cairo_fill(cr);
         }
 
-        // the actual value over time, where it plays. bottom of the row = 0, top = 1
-        // bit jaggy, one point every 4 pixels
+        // value line
         if (used[fx] && fx != FX_STUCK && !swing_curve.empty()) {
             cairo_set_source_rgba(cr, 1, 1, 1, 0.9);
             cairo_set_line_width(cr, 1);
@@ -535,14 +530,12 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
         }
 
         char pct[32];
-        // shows how much it moves too
         snprintf(pct, sizeof(pct), "%d%%  \302\261%.2f", (int)(played / song * 100 + 0.5f), fx_spread(fx) * swing);
         cairo_set_source_rgb(cr, 0.85, 0.85, 0.85);
         cairo_move_to(cr, W - RIGHT + 6, y + rowh - 4);
         cairo_show_text(cr, pct);
     }
 
-    // where the song changes
     cairo_set_line_width(cr, 1);
     cairo_set_source_rgba(cr, 1, 1, 1, 0.22);
     for (size_t i = 0; i < sections.size(); i++) {
@@ -551,7 +544,6 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
     }
     cairo_stroke(cr);
 
-    // seconds along the bottom
     cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
     int step = song > 300 ? 60 : (song > 60 ? 10 : (song > 15 ? 5 : 1));
     for (int t = 0; t < song; t += step) {

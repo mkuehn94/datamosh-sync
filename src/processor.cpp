@@ -335,7 +335,6 @@ void VideoMosher::swing_params(float time) {
     swung_params.recursion = swung_value(FX_RECURSION, slider_params.recursion, z, s);
     swung_params.hom = swung_value(FX_HOM, slider_params.hom, z, s);
 
-    // keep score
     float now[FX_COUNT] = {
         swung_params.glitch_intensity, swung_params.motion_blur, swung_params.color_shift, 0, swung_params.beat_sync,
         swung_params.rot, swung_params.warp, swung_params.quake, swung_params.spectral, swung_params.groove,
@@ -354,7 +353,6 @@ void VideoMosher::play_section(float time) {
 
     params = swung_params;
 
-    // build gets worse and worse, breath is almost nothing, etc
     float hard = hardness_at(*s, time);
     params.glitch_intensity *= hard;
     params.motion_blur *= hard;
@@ -369,7 +367,6 @@ void VideoMosher::play_section(float time) {
     params.recursion *= hard;
     params.hom *= hard;
 
-    // and on top of that per effect, the ones too violent for this moment
     params.glitch_intensity *= s->fx_scale[FX_GLITCH];
     params.motion_blur *= s->fx_scale[FX_BLUR];
     params.color_shift *= s->fx_scale[FX_VOID];
@@ -399,7 +396,7 @@ void VideoMosher::play_section(float time) {
     stuck_allowed = s->on[FX_STUCK];
     if (!stuck_allowed) stuck_timer = 0;  // stuck patch shouldnt outlive its section
 
-    // starts again fresh, or you get a flash of a street from a minute ago
+    // or old frames flash
     if (s->on[FX_QUAKE] && !fx_was_on[FX_QUAKE]) warp->wake_quake();
     if (s->on[FX_SPECTRAL] && !fx_was_on[FX_SPECTRAL]) warp->wake_spectral();
     if (s->on[FX_RECURSION] && !fx_was_on[FX_RECURSION]) warp->wake_recursion();
@@ -423,7 +420,6 @@ bool VideoMosher::open_other(const string& path) {
     return true;
 }
 
-// reads until this video is where the output is. with the same fps thats one read
 bool VideoMosher::catch_up(VideoProcessor* v, long& read, double src_fps, long frame_index, double out_fps) {
     long want = (long)((frame_index + 1) * src_fps / out_fps + 0.0001);
     if (want <= read) want = read + 1;
@@ -488,14 +484,11 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
     }
     af.cut = warp->scene_cut();
 
-    // how much of the other world right now. section says the base, kicks rip it open
-    // and it closes again
     if (other) {
         const Section* ds = section_at(sections, time);
         if (af.kick) dim_punch = 0.4f + 0.6f * af.hit;
         else dim_punch *= pow(0.05f, 1.0f / fps / 0.3f);
         float dim = ds ? dimension_at(*ds, time, slider_params.cross) : slider_params.cross;
-        // breath stays clean no matter how hard the kick is
         if (dim > 0) dim += dim_punch * slider_params.cross * 0.5f;
         warp->look_at_other(other_frame, other_eyes, dim);
     }
@@ -972,7 +965,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
 
     cout << "done processing " << frame_count << " frames" << endl;
 
-    // what the sliders really did, before the parts and how hard stuff on top
+    // debug. keep it
     if (swing_frames > 0) {
         for (int fx = 0; fx < FX_COUNT; fx++) {
             double m = swing_sum[fx] / swing_frames;

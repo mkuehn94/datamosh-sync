@@ -103,7 +103,6 @@ bool AudioAnalyzer::load_from_video(const string& video_path) {
     return load(video_path);
 }
 
-// textbook radix 2
 static void fft(vector<complex<float> >& a) {
     int n = a.size();
     for (int i = 1, j = 0; i < n; i++) {
@@ -396,7 +395,6 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
     vector<float> energy(n), bass(n), treble(n), busy(n), moving(n);
     for (int i = 0; i < n; i++) {
         float t = i * HOP;
-        // curves snap back fast, a single sample could be between two hits
         for (int k = 0; k < 5; k++) {
             float tt = t + k * HOP / 5;
             energy[i] += audio->get_current_energy(tt) / 5;
@@ -409,11 +407,10 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         moving[i] = mean_between(motion, (int)(t * 10), (int)((t + HOP) * 10));
     }
 
-    // copies for the novelty thing, the raw ones are for the section numbers
     vector<float> ze = energy, zb = bass, zt = treble, zu = busy, zm = moving;
     squash(ze); squash(zb); squash(zt); squash(zu); squash(zm);
 
-    // short clips get a shorter window or nothing ever fits
+    // short clips
     int win = (int)(min(4.0f, song / 4) / HOP);
     if (win < 1) win = 1;
     vector<float> novelty(n, 0.0f);
@@ -439,7 +436,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         if (peak) bounds.push_back(snap_to_beat(i * HOP, beats));
     }
 
-    // hard cuts in the video. motion jumps way above whats around it
+    // hard cuts
     int cuts = 0;
     for (int i = 1; i < (int)motion.size(); i++) {
         float around = (mean_between(motion, i - 10, i) + mean_between(motion, i + 1, i + 11)) / 2;
@@ -468,7 +465,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
     vector<float> drop_times;
 
     if (has_shape) {
-        // drops: louder + more bass right now than the 2 seconds before
+        // drops
         int two = (int)(2.0f / HOP);
         vector<float> hit(n), jump(n, 0.0f);
         for (int i = 0; i < n; i++) hit[i] = en01[i] + 0.5f * ba01[i];
@@ -485,7 +482,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
             if (peak) drop_times.push_back(snap_to_beat(i * HOP, beats));
         }
 
-        // builds: tension keeps climbing for at least 8 sec
+        // builds. 8 sec+
         for (int i = 0; i + 4 < n; ) {
             int j = i;
             while (j + 4 < n && tension[j + 4] >= tension[j] - 0.01f) j++;
@@ -513,7 +510,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
             i = j + 1;
         }
 
-        // breakdown: was loud, now clearly isnt, stays that way a while
+        // breakdown
         for (int i = 1; i < n; ) {
             if (tension[i] >= 0.45f) { i++; continue; }
             int j = i;
@@ -604,7 +601,6 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         }
     }
 
-    // how hard every effect hits, on top of its slider. every step of the song
     vector<float> hard(n);
     for (int i = 0; i < n; i++) {
         float t = i * HOP;
@@ -625,7 +621,6 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         if (now->role == ROLE_AFTER) hard[i] = 1.0f + (base - 1.0f) * f;  // falls apart slowly
     }
 
-    // long parts get chopped at beats
     bounds.push_back(0.0f);
     bounds.push_back(song);
     sort(bounds.begin(), bounds.end());
@@ -641,7 +636,6 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
     }
     sort(chopped.begin(), chopped.end());
 
-    // nothing shorter than min_len, whatever is too close just goes away
     vector<float> keep;
     keep.push_back(0.0f);
     for (size_t i = 1; i < chopped.size(); i++) {
@@ -651,7 +645,7 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
     }
     keep.push_back(song);
 
-    // the forced cuts go in now, whatever is too close to one has to move out
+    // forced cuts win
     sort(forced.begin(), forced.end());
     vector<float> final_cuts;
     for (size_t i = 0; i < keep.size(); i++) {
@@ -730,8 +724,7 @@ vector<float> intensity_curve(AudioAnalyzer* audio) {
         float t = i / 20.0f;
         raw[i] = 0.5f * audio->get_current_energy(t) + 0.3f * audio->get_bass(t) + 0.2f * audio->get_treble(t);
     }
-    // half fast half slow. only fast = it shakes with every single kick, only slow =
-    // you dont notice it moving
+    // half fast half slow
     vector<float> fast = blur_curve(raw, 5);    // quarter sec
     vector<float> slow = blur_curve(raw, 40);   // 2 sec
     vector<float> out(raw.size());
@@ -781,7 +774,6 @@ void print_track(const vector<Section>& sections) {
         }
         printf("%10s |%s| %3d%%\n", fx_name(fx), line.c_str(), (int)(played / song * 100 + 0.5f));
     }
-    // what it thinks it did, so you can check that against reality
     for (size_t i = 0; i < sections.size(); i++) {
         float clean = 1;
         for (int fx = 0; fx < FX_COUNT; fx++) clean *= 1.0f - sections[i].fx_aggro[fx] * 0.7f;

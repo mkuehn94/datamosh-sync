@@ -113,7 +113,7 @@ void WarpEngine::init(int width, int height, float f) {
     van_y = h / 2.0f;
 }
 
-// ===== motion estimation =====
+// motion
 // two stage: full search on a 1/4 size picture, then refine at full res.
 // way better than the one in motion_track which only looks at +-8 in steps
 // of 4. that one is fine for "is something moving", not for real vectors
@@ -207,7 +207,6 @@ void WarpEngine::estimate_motion(const uint8_t* rgb) {
     memcpy(prev_small, small, sw * sh);
 }
 
-// ===== warp field =====
 
 void WarpEngine::build_warp_field(float warp, const AudioFrame& a) {
     float frame_scale = 30.0f * dt * scale;  // pixels-per-frame tuned at 30fps/1080
@@ -327,7 +326,9 @@ void WarpEngine::update_sampler(const AudioFrame& a) {
     }
 }
 
-// ===== rot =====
+
+
+//////////// ROT ////////////
 // this is literally what a decoder does:
 //    out(x) = ref(x + mv) + residual
 // except ref is OUR canvas and not the real previous frame, and the
@@ -399,8 +400,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
     build_warp_field(warp, a);
 
-    // how fast the picture heals. block by block, never a crossfade.
-    // crossfading is what made the old stuff look like movie maker
+    // heal speed. blocks, NOT a crossfade
     float r = rot + (1.0f - rot) * warp * 0.5f;
     // the sampler needs the picture to stick around or you never see it
     r = r + (1.0f - r) * groove * 0.6f;
@@ -428,7 +428,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
     }
     float diag = sqrt((float)(w*w + h*h));
 
-    // rand() isnt thread safe, roll the dice up front
+    // rand() not thread safe
     vector<unsigned char> dice(gx * gy);
     for (int i = 0; i < gx * gy; i++) dice[i] = rand_r(&rot_seed) & 255;
 
@@ -455,9 +455,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                 }
             }
 
-            // hijacked vector = real motion + the warp field
-            // leftover subpixel stuff carries to the next frame, otherwise
-            // anything under half a pixel rounds to 0 and just never moves
+            // real motion + warp. keep the subpixel leftover or slow stuff never moves
             float want_x = fx[idx] + rem_x[idx];
             float want_y = fy[idx] + rem_y[idx];
             int wx = (int)floor(want_x + 0.5f);
@@ -500,9 +498,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
             } else if (d2 < luma_heal) {
                 mode = 3;
             } else if (berr < 5) {
-                // barely changed = P-skip, a real encoder wouldnt send a
-                // residual either. without this sensor noise and the source
-                // compression add up in the canvas into grain
+                // p-skip, or noise adds up to grain
                 mode = 2;
             }
 
@@ -601,7 +597,7 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     int size = w * h * 3;
     int cap = (int)(QUAKE_SECONDS * fps);
 
-    // lazy alloc. at 1440x1080 60fps this is about 560MB
+    // ~560MB at 1440x1080 60fps!!
     if ((int)ring_frames.size() < cap) {
         ring_frames.assign(cap, nullptr);
         for (int i = 0; i < cap; i++) ring_frames[i] = (uint8_t*)malloc(size);
@@ -675,7 +671,6 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
                     n++;
                 }
             }
-            // 32 is a lot of motion per frame at 1080
             dp += min(1.0f, mv_sum / n / (32.0f * scale)) * sink;
 
             for (size_t i = 0; i < rings.size(); i++) {
@@ -697,7 +692,7 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
         }
     }
 
-    // little blur so the sheets have shape
+    // blur
     #pragma omp parallel for
     for (int by = 0; by < gy; by++) {
         for (int bx = 0; bx < gx; bx++) {
@@ -744,7 +739,7 @@ void WarpEngine::time_quake(uint8_t* data, float amount, const AudioFrame& a) {
     }
 }
 
-// ===== spectral lag =====
+/* spectral lag */
 // real 8x8 dct like a jpeg/h264 block, one held value per coefficient.
 // every frequency band updates at a different rate so the outlines of a car
 // are from a second ago while its brightness is from right now. every few
@@ -826,7 +821,6 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
     // frame with a checkerboard on it
     int split = spectral_flip ? (int)(amount * 1.5f) : 4 - (int)(amount * 3.0f);
 
-    // chance per frame that a chunk grabs a new held image
     float grab = min(1.0f, dt / (0.1f + amount * 1.6f));
     if (a.kick) grab = 0.25f;  // kicks refresh a good part of it at once
 
@@ -869,7 +863,6 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
             unsigned r = (((unsigned)(by / 6) * 73856093u) ^ ((unsigned)(bx / 6) * 19349663u) ^ frame_seed) * 2654435761u;
             bool grabbing = first || (r >> 16) / 65536.0f < grab;
 
-            // low slider = only some chunks take part, they swap on every flip
             unsigned r2 = (((unsigned)(by / 6) * 83492791u) ^ ((unsigned)(bx / 6) * 40503u) ^ ((unsigned)(spectral_kicks / 8) * 2654435761u)) * 2654435761u;
             bool in_on_it = (r2 >> 16) / 65536.0f < amount * 1.6f;
 
@@ -881,7 +874,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
                     if (!held || !in_on_it) {
                         m[i] = c[i];
                     } else if (grabbing) {
-                        // never quantize DC or the blocks flash
+                        // not DC!
                         float q = 1.0f + f * 3.0f * crush;
                         m[i] = i == 0 ? c[i] : floor(c[i] / q + 0.5f) * q * gain;
                     }
@@ -926,8 +919,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
 
             idct8(m, res);
 
-            // only luma goes through here, add the difference to all channels
-            // and the color stays live
+            // luma only
             for (int y = 0; y < 8; y++) {
                 uint8_t* p = data + ((y0 + y) * w + x0) * 3;
                 for (int x = 0; x < 8; x++) {
@@ -942,7 +934,7 @@ void WarpEngine::spectral_lag(uint8_t* data, float amount, const AudioFrame& a) 
     }
 }
 
-// ===== block recursion =====
+// recursion.
 // on a kick some rectangles fill up with tiny copies of the whole frame. they
 // read from the LAST output, which already has the old tiny copies in it, so
 // you get copies inside copies inside copies. also written into the rot canvas
@@ -964,7 +956,7 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
         for (int i = 0; i < n; i++) {
             if (cells.size() > 24) break;
             Cell c;
-            // size in macroblocks, keeps the frame shape so the copies arent squished
+            // in macroblocks
             int mult = 1;
             if (h >= 800) mult = 2;
             c.ch = BLOCK * mult * (2 + rand_r(&recur_seed) % (2 + (int)(amount * 9.0f)));
@@ -980,7 +972,7 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
             c.from_other = other_on() && rnd(&recur_seed) < 0.6f;
             cells.push_back(c);
         }
-        // the really big hits: whole frame goes for a moment
+        // big hit = whole frame
         if (amount > 0.5f && a.bass > 0.85f && rnd(&recur_seed) < amount * 0.5f) {
             Cell c;
             c.x = 0; c.y = 0;
@@ -995,7 +987,6 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
 
     for (size_t i = 0; i < cells.size(); i++) {
         Cell& c = cells[i];
-        // slowly fall into the copy while it lives
         float zoom = 1.0f - 0.35f * (c.age / c.life);
         int tile_w = c.cw / c.tiles;
         int tile_h = c.ch / c.tiles;
@@ -1033,7 +1024,6 @@ void WarpEngine::block_recursion(uint8_t* data, float amount, const AudioFrame& 
     memcpy(recur_prev, data, size);
 }
 
-// ===== texture swap =====
 // every pixel = big blurry brightness + fine stuff on top. keep your own
 // big brightness and wear the fine stuff of a chunk from somewhere else. road
 // with a house on it, colors stay. kicks pick new places to steal from and
@@ -1058,13 +1048,12 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
         tex_off_y.assign(cw * ch, 0);
     }
 
-    // copy of the luma, we write into data while reading this
     vector<int> lum(w * h);
     for (int i = 0; i < w * h; i++) {
         lum[i] = (data[i*3] + 2 * data[i*3+1] + data[i*3+2]) / 4;
     }
 
-    // average brightness per grid cell
+    // avg per cell
     vector<int> cell_sum(gw * gh, 0), cell_n(gw * gh, 0);
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
@@ -1114,7 +1103,7 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
             for (int t = 0; t < 6; t++) {
                 int sx = rand_r(&tex_seed) % w;
                 int sy = rand_r(&tex_seed) % h;
-                // how busy is it there, only looks at every 4th pixel
+                // every 4th px
                 float busy = 0;
                 for (int yy = sy; yy < sy + chunk && yy < h; yy += 4) {
                     for (int xx = sx; xx < sx + chunk && xx < w; xx += 4) {
@@ -1163,7 +1152,6 @@ void WarpEngine::texture_swap(uint8_t* data, float amount, const AudioFrame& a) 
         }
     }
 
-    // pixels per second, treble speeds it up
     frame_crawl += (10.0f + a.treble * 40.0f) * scale * 2.0f * dt;
 }
 
@@ -1201,7 +1189,7 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         return;
     }
 
-    // which blocks can we even trust
+    // TODO threshold is a guess. 24 and 30 work on the drone stuff
     // flat blocks (sky, road) dont know where they went, their vectors are junk
     vector<char> usable(gx * gy, 0);
     for (int by = 0; by < gy; by++) {
@@ -1218,7 +1206,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         }
     }
 
-    // fit the camera
     // vx = ax*x + bx*y + cx, vy = ay*x + by*y + cy. least squares written out
     // by hand, twice, second time without the blocks that didnt fit the first
     float ax = 0, bx_ = 0, cx_ = 0, ay = 0, by_ = 0, cy_ = 0;
@@ -1248,7 +1235,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         by_ = (sxx * (syv * n - sy * sv) - sxv * (sxy * n - sy * sx) + sx * (sxy * sv - syv * sx)) / det;
         cy_ = (sxx * (syy * sv - sy * syv) - sxy * (sxy * sv - sx * syv) + sxv * (sxy * sy - syy * sx)) / det;
 
-        // throw out whatever is far from the fit
         for (int by = 0; by < gy; by++) {
             for (int bx = 0; bx < gx; bx++) {
                 int i = by * gx + bx;
@@ -1259,7 +1245,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         }
     }
 
-    // what moves different from the camera
     vector<float> off(gx * gy, 0.0f);
     vector<float> sorted;
     for (int by = 0; by < gy; by++) {
@@ -1286,7 +1271,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         for (int bx = 0; bx < gx; bx++) {
             int i = by * gx + bx;
             if (off[i] <= limit) continue;
-            // lonely blocks are nearly always wrong matches
             int friends = 0;
             for (int j = max(0, by - 1); j <= min(gy - 1, by + 1); j++) {
                 for (int k = max(0, bx - 1); k <= min(gx - 1, bx + 1); k++) {
@@ -1296,7 +1280,7 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
             if (friends >= 3) obj[i] = 1;  // counts itself
         }
     }
-    // grow twice, the middle of a car is flat so it never gets a vector
+    // grow x2 (middle of a car has no vector)
     vector<char> grown = obj;
     for (int ring = 0; ring < 2; ring++) {
         vector<char> before = grown;
@@ -1331,7 +1315,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
     if (a.cut) memcpy(hom_ref_tmp, luma, w * h);  // new world, nothing to compare with
 
     // draw the objects into the buffer that never clears
-    // pixel by pixel so you get the outline of the car and not a square
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int i = y * w + x;
@@ -1365,7 +1348,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
         }
     }
 
-    // clearing
     // more slider = world stays stale for longer. clears land on kicks
     float hold = 0.1f + amount * amount * 6.0f;
     for (int i = 0; i < cw * ch; i++) {
@@ -1387,7 +1369,6 @@ void WarpEngine::hall_of_mirrors(uint8_t* data, float amount, const AudioFrame& 
     memcpy(data, hom_buf, size);
 }
 
-// ===== coming back after a section off =====
 
 void WarpEngine::wake_quake() {
     // ring_pos = 0;

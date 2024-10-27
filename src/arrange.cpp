@@ -51,7 +51,6 @@ float hardness_at(const Section& s, float time) {
     return s.hard_start + (s.hard_end - s.hard_start) * f;
 }
 
-// who wants what kind of moment
 static bool likes_drop(int fx) {
     return fx == FX_QUAKE || fx == FX_RECURSION || fx == FX_WARP || fx == FX_VOID
         || fx == FX_BEATSYNC || fx == FX_GLITCH;
@@ -145,24 +144,21 @@ float aggression(int fx, float amount, float void_tol) {
     return a > 1 ? 1 : a;
 }
 
-// standard deviation of every effect around its slider. NOT from the table above
-// directly, mirrors measures middle of the road there but its the strongest thing
-// in here to look at and at .9 instead of .6 its a different video. so by hand,
-// looking at the table: the worse it hits the less room it gets
+// sd around the slider. by hand, worse it hits = less room
 float fx_spread(int fx) {
     static const float spread[FX_COUNT] = {
-        0.30f,  // glitch, barely does anything anyway
-        0.25f,  // blur
-        0.25f,  // void
+        0.30f,  // glitch
+        0.25f,
+        0.25f,
         0.00f,  // stuck, only its length, nothing to move
-        0.18f,  // beat sync
+        0.18f,
         0.15f,  // rot
-        0.15f,  // warp
+        0.15f,
         0.05f,  // quake
-        0.15f,  // spectral
-        0.15f,  // sampler
+        0.15f,
+        0.15f,
         0.10f,  // texswap
-        0.20f,  // recursion
+        0.20f,
         0.04f,  // mirrors
     };
     return spread[fx];
@@ -371,7 +367,6 @@ void assign_parts(vector<Section>& sections, const float* parts, const bool* use
                 if (sections[i].on[fx]) continue;
                 int role = sections[i].role;
                 float len = sections[i].end - sections[i].start;
-                // moment of nothing right before the hit, thats why the hit hits
                 if (role == ROLE_BREATH) continue;
                 if (role == ROLE_LEADIN && !likes_leadin(fx)) continue;
                 // climax gets a lot but not everything or the whole rest of
@@ -459,8 +454,7 @@ float track_cost(const vector<Section>& sections, const bool* used) {
         const Section& s = sections[i];
         float len = s.end - s.start;
 
-        // how wrecked should this be, NOT scaled to the budget like in polish(). the
-        // budget is the thing were looking for here
+        // unlike polish() no scaling here
         float want = 0.1f + 0.6f * s.music * s.music;
         if (s.role == ROLE_BREATH) want = 0;
         if (s.role == ROLE_DROP) want = 0.85f;
@@ -482,13 +476,10 @@ float track_cost(const vector<Section>& sections, const bool* used) {
         float got = 1.0f - clean;
         cost += len * (got - want) * (got - want) * 3.0f;
 
-        // too many at once = the just effects on top of each other thing
         int limit = 1 + (int)(4.0f * s.music + 0.5f);
         if (s.role == ROLE_DROP || s.role == ROLE_CLIMAX) limit = 8;
         if (n > limit) cost += len * 0.02f * (n - limit) * (n - limit);
-        // loud part with nothing going on
         if (n == 0 && s.role != ROLE_BREATH && s.music > 0.3f) cost += len * 0.1f;
-        // effects in places they dont like
         cost -= len * 0.03f * taste_sum;
 
         if (i > 0) {
@@ -497,7 +488,7 @@ float track_cost(const vector<Section>& sections, const bool* used) {
                 if (s.on[fx] != sections[i-1].on[fx]) toggles[fx]++;
                 else same++;
             }
-            // exactly the same for two sections in a row gets boring
+            // boring
             if (same == FX_COUNT && s.role != ROLE_CLIMAX) cost += 0.1f;
         }
     }
@@ -518,14 +509,13 @@ float track_cost(const vector<Section>& sections, const bool* used) {
     return cost;
 }
 
-// box muller. c++11 has normal_distribution but then its not the same on every machine
+// box muller
 static float gauss(unsigned* seed) {
     float u = rnd(seed), v = rnd(seed);
     if (u < 0.0001f) u = 0.0001f;
     return sqrt(-2.0f * log(u)) * cos(6.2831853f * v);
 }
 
-// one go of annealing from start[], best one ends up in out[]
 static float anneal_once(vector<Section>& sections, const float* start, float* out, const bool* used,
                          const float* amounts, float void_tol, unsigned seed) {
     float cur[FX_COUNT];
@@ -595,8 +585,6 @@ float auto_parts(vector<Section>& sections, float* parts, const bool* used,
     assign_parts(sections, best, used, amounts, void_tol);
     best_cost = track_cost(sections, used);
 
-    // annealing gets close, this walks the last bit. one slider at a time until
-    // nothing helps anymore
     bool better = true;
     for (int pass = 0; pass < 6 && better; pass++) {
         better = false;
