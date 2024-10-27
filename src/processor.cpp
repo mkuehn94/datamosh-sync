@@ -4,7 +4,7 @@
 #include "processor.h"
 #include "constants.h"
 #include <cstring>
-#include <iostream>
+#include <cstdio>
 #include <cmath>
 
 extern "C" {
@@ -31,16 +31,16 @@ VideoProcessor::~VideoProcessor() {
 }
 
 bool VideoProcessor::open(const string& path) {
-    cout << "[vp] opening " << path << endl;
+    printf("[vp] opening %s\n", path.c_str());
     if (avformat_open_input(&fmt_ctx, path.c_str(), nullptr, nullptr) < 0) {
-        cerr << "Could not open video file: " << path << endl;
+        fprintf(stderr, "Could not open video file: %s\n", path.c_str());
         return false;
     }
 
-    cout << "[vp] finding stream info..." << endl;
+    printf("[vp] finding stream info...\n");
     avformat_find_stream_info(fmt_ctx, nullptr);
 
-    cout << "[vp] finding video stream..." << endl;
+    printf("[vp] finding video stream...\n");
     for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
         if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_stream_idx = i;
@@ -49,7 +49,7 @@ bool VideoProcessor::open(const string& path) {
     }
 
     if (video_stream_idx == -1) {
-        cerr << "No video stream found" << endl;
+        fprintf(stderr, "No video stream found\n");
         return false;
     }
 
@@ -59,7 +59,7 @@ bool VideoProcessor::open(const string& path) {
     avcodec_parameters_to_context(codec_ctx, codecpar);
 
     if (avcodec_open2(codec_ctx, codec, nullptr) < 0) {
-        cerr << "Could not open codec" << endl;
+        fprintf(stderr, "Could not open codec\n");
         return false;
     }
 
@@ -135,8 +135,8 @@ uint8_t* VideoProcessor::get_frame_rgb_sized(int out_w, int out_h) {
                                    SWS_BILINEAR, nullptr, nullptr, nullptr);
         sized_tmp = (uint8_t*)malloc(sw_ * sh_ * 3);
         sized_buffer = (uint8_t*)malloc(out_w * out_h * 3);
-        cout << "[vp] other video " << width << "x" << height << " -> " << sw_ << "x" << sh_
-             << " cut to " << out_w << "x" << out_h << endl;
+        printf("[vp] other video %dx%d -> %dx%d cut to %dx%d\n",
+               width, height, sw_, sh_, out_w, out_h);
     }
     uint8_t* dst[4] = {sized_tmp, nullptr, nullptr, nullptr};
     int lines[4] = {sw_ * 3, 0, 0, 0};
@@ -259,12 +259,12 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
     warp = new WarpEngine();
 
     if (!video->open(video_path)) {
-        cerr << "failed to open video" << endl;
+        fprintf(stderr, "failed to open video\n");
         return false;
     }
 
     if (!audio->load(audio_path)) {
-        cerr << "failed to load audio" << endl;
+        fprintf(stderr, "failed to load audio\n");
         return false;
     }
 
@@ -272,7 +272,7 @@ bool VideoMosher::init(const string& video_path, const string& audio_path) {
     audio->analyze();
 
     beat_times = audio->get_beat_times();
-    cout << "initialized with " << beat_times.size() << " beats" << endl;
+    printf("initialized with %zu beats\n", beat_times.size());
 
     return true;
 }
@@ -281,31 +281,31 @@ bool VideoMosher::init_with_embedded_audio(const string& video_path) {
     // input_video_path = video_path;  // save for audio copy later
     source_path = video_path;
 
-    cout << "[debug] creating objects..." << endl;
+    printf("[debug] creating objects...\n");
     video = new VideoProcessor();
     audio = new AudioAnalyzer();
     effects = new EffectEngine();
     warp = new WarpEngine();
 
-    cout << "[debug] opening video..." << endl;
+    printf("[debug] opening video...\n");
     if (!video->open(video_path)) {
-        cerr << "failed to open video" << endl;
+        fprintf(stderr, "failed to open video\n");
         return false;
     }
 
-    cout << "[debug] loading audio from video..." << endl;
+    printf("[debug] loading audio from video...\n");
     // extract audio from the same video file
     if (!audio->load_from_video(video_path)) {
-        cerr << "failed to extract audio from video" << endl;
+        fprintf(stderr, "failed to extract audio from video\n");
         return false;
     }
 
-    cout << "[debug] analyzing beats..." << endl;
+    printf("[debug] analyzing beats...\n");
     audio->limit_to(song_limit);
     audio->analyze();
 
     beat_times = audio->get_beat_times();
-    cout << "initialized with " << beat_times.size() << " beats (from video)" << endl;
+    printf("initialized with %zu beats (from video)\n", beat_times.size());
 
     return true;
 }
@@ -412,7 +412,7 @@ void VideoMosher::play_section(float time) {
 bool VideoMosher::open_other(const string& path) {
     other = new VideoProcessor();
     if (!other->open(path)) {
-        cerr << "cant open the other video: " << path << endl;
+        fprintf(stderr, "cant open the other video: %s\n", path.c_str());
         delete other;
         other = nullptr;
         return false;
@@ -726,7 +726,7 @@ bool VideoMosher::process_frame(uint8_t* frame_data, int width, int height, floa
         // old shuffle slider (repurposed) = how long it stays stuck
         // these were frame counts from when everything was 30fps
         stuck_timer = (int)((20 + params.block_shuffle * 120 + rand() % 60) * fps / 30.0f);
-        cout << "[stuck] " << stuck_timer / fps << "s" << endl;
+        printf("[stuck] %ds\n", (int)(stuck_timer / fps));
     }
 
     return af.kick;
@@ -844,17 +844,17 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
         if (used[FX_QUAKE]) warp->keep_quake_tape();
     }
 
-    cout << "processing video..." << endl;
-    cout << "glitch: " << params.glitch_intensity << endl;
-    cout << "jpeg: " << params.jpeg_quality << endl;
-    cout << "motion blur: " << params.motion_blur << endl;
-    cout << "color shift: " << params.color_shift << endl;
-    cout << "block shuffle: " << params.block_shuffle << endl;
-    cout << "beat sync: " << params.beat_sync << endl;
-    cout << "rot: " << params.rot << "  warp: " << params.warp
-         << "  quake: " << params.quake << "  spectral: " << params.spectral << endl;
-    cout << "groove: " << params.groove << "  texswap: " << params.texswap
-         << "  recursion: " << params.recursion << "  hom: " << params.hom << endl;
+    printf("processing video...\n");
+    printf("glitch: %g\n", params.glitch_intensity);
+    printf("jpeg: %g\n", params.jpeg_quality);
+    printf("motion blur: %g\n", params.motion_blur);
+    printf("color shift: %g\n", params.color_shift);
+    printf("block shuffle: %g\n", params.block_shuffle);
+    printf("beat sync: %g\n", params.beat_sync);
+    printf("rot: %g  warp: %g  quake: %g  spectral: %g\n",
+           params.rot, params.warp, params.quake, params.spectral);
+    printf("groove: %g  texswap: %g  recursion: %g  hom: %g\n",
+           params.groove, params.texswap, params.recursion, params.hom);
 
     int width = video->get_width();
     int height = video->get_height();
@@ -865,16 +865,16 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
         AVRational o = other->get_fps();
         b_fps = av_q2d(o);
         if (b_fps < a_fps) src_fps = o;
-        cout << "[other] fps " << a_fps << " + " << b_fps << " -> " << av_q2d(src_fps) << endl;
+        printf("[other] fps %g + %g -> %g\n", a_fps, b_fps, av_q2d(src_fps));
     }
     fps = av_q2d(src_fps);
-    cout << "source fps: " << fps << endl;
+    printf("source fps: %g\n", fps);
 
     warp->init(width, height, fps);
 
     // setup output encoder
     if (!setup_encoder(output_path, width, height, src_fps)) {
-        cerr << "Failed to setup encoder" << endl;
+        fprintf(stderr, "Failed to setup encoder\n");
         return false;
     }
 
@@ -893,7 +893,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
         } else {
             if (!catch_up(video, a_read, a_fps, out_index, fps)) break;
             if (!catch_up(other, b_read, b_fps, out_index, fps)) {
-                cout << "[other] ran out first at frame " << out_index << endl;
+                printf("[other] ran out first at frame %ld\n", out_index);
                 break;
             }
             other_rgb = other->get_frame_rgb_sized(width, height);
@@ -956,14 +956,14 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
             }
 
             if (frame_count % 30 == 0) {
-                cout << "processed " << frame_count << " frames" << endl;
+                printf("processed %d frames\n", frame_count);
             }
         }
 
         time += dt;
     }
 
-    cout << "done processing " << frame_count << " frames" << endl;
+    printf("done processing %d frames\n", frame_count);
 
     // debug. keep it
     if (swing_frames > 0) {
@@ -976,7 +976,7 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
     }
 
     finish_encoding();
-    cout << "wrote output to: " << output_path << endl;
+    printf("wrote output to: %s\n", output_path.c_str());
 
     return true;
 }
@@ -1022,7 +1022,7 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     
     // open encoder
     if (avcodec_open2(enc_ctx, codec, nullptr) < 0) {
-        cerr << "Failed to open encoder" << endl;
+        fprintf(stderr, "Failed to open encoder\n");
         return false;
     }
     
@@ -1032,7 +1032,7 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     // open output file
     if (!(output_ctx->oformat->flags & AVFMT_NOFILE)) {
         if (avio_open(&output_ctx->pb, output_path.c_str(), AVIO_FLAG_WRITE) < 0) {
-            cerr << "Could not open output file" << endl;
+            fprintf(stderr, "Could not open output file\n");
             return false;
         }
     }
@@ -1056,18 +1056,18 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     
     next_pts = 0;
 
-    cout << "encoder setup complete: " << width << "x" << height << " @ " << fps << " fps" << endl;
+    printf("encoder setup complete: %dx%d @ %g fps\n", width, height, fps);
 
     // try to copy audio stream
     // TODO: this is kinda hacky but works
     // TEMP DISABLED: bad_alloc on large videos, need to fix
     /*
     if (!copy_audio_stream()) {
-        cout << "warning: could not copy audio (output will be silent)" << endl;
+        printf("warning: could not copy audio (output will be silent)\n");
         // not fatal, video still works
     }
     */
-    cout << "audio copying disabled temporarily (memory issues)" << endl;
+    printf("audio copying disabled temporarily (memory issues)\n");
 
     return true;
 }
@@ -1098,7 +1098,7 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             break;
         } else if (ret < 0) {
-            cerr << "Error encoding frame" << endl;
+            fprintf(stderr, "Error encoding frame\n");
             break;
         }
         
@@ -1114,7 +1114,7 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
 void VideoMosher::finish_encoding() {
     if (!output_ctx) return;  // already finished or never started
 
-    cout << "finishing encoding..." << endl;
+    printf("finishing encoding...\n");
 
     // flush encoder
     if (enc_ctx) {
@@ -1136,7 +1136,7 @@ void VideoMosher::finish_encoding() {
     // TODO: this whole section needs rewrite
     /*
     if (audio_out_stream) {
-        cout << "copying audio packets..." << endl;
+        printf("copying audio packets...\n");
         AVFormatContext* input_ctx = nullptr;
 
         if (avformat_open_input(&input_ctx, nullptr, nullptr, nullptr) >= 0) {
@@ -1163,7 +1163,7 @@ void VideoMosher::finish_encoding() {
                     av_packet_unref(pkt);
                 }
                 av_packet_free(&pkt);
-                cout << "audio copied" << endl;
+                printf("audio copied\n");
             }
 
             avformat_close_input(&input_ctx);
@@ -1173,13 +1173,13 @@ void VideoMosher::finish_encoding() {
 
     // write trailer
     if (output_ctx) {
-        cout << "writing trailer..." << endl;
+        printf("writing trailer...\n");
         av_write_trailer(output_ctx);
-        cout << "trailer written" << endl;
+        printf("trailer written\n");
     }
 
     // cleanup
-    cout << "cleaning up encoder..." << endl;
+    printf("cleaning up encoder...\n");
     if (enc_sws_ctx) {
         sws_freeContext(enc_sws_ctx);
         enc_sws_ctx = nullptr;
@@ -1188,6 +1188,6 @@ void VideoMosher::finish_encoding() {
     enc_frame = nullptr;
     enc_ctx = nullptr;
     output_ctx = nullptr;
-    cout << "encoder cleanup done (skipped some frees to avoid crash)" << endl;
+    printf("encoder cleanup done (skipped some frees to avoid crash)\n");
 }
 
