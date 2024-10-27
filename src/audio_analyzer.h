@@ -41,4 +41,7 @@ std::vector<float> intensity_curve(AudioAnalyzer* audio);
 void print_sections(const std::vector<Section>& sections);  // the gui reads this
 void print_track(const std::vector<Section>& sections);     // for the terminal
 
+// not audio analysis at all but this is where the ffmpeg forks live
+int mux_audio(const std::string& video, const std::string& audio_src, const std::string& out);
+
 #endif

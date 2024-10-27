@@ -19,30 +19,6 @@ string get_basename(const string& path) {
     return name;
 }
 
-// glue the audio back on with ffmpeg, the render above is silent
-int mux_audio(const string& video, const string& audio_src, const string& out) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        // child
-        execlp("ffmpeg", "ffmpeg",
-               "-i", video.c_str(),
-               "-i", audio_src.c_str(),
-               "-c:v", "copy",
-               "-c:a", "copy",
-               "-map", "0:v:0",
-               "-map", "1:a:0",
-               "-shortest",
-               out.c_str(),
-               "-y",
-               "-loglevel", "error",
-               (char*)nullptr);
-        exit(1);  // execlp failed
-    }
-    int status;
-    waitpid(pid, &status, 0);
-    return WEXITSTATUS(status);
-}
-
 // shorter of the two videos, thats how long the output gets
 static float shorter_video(const string& a, const string& b) {
     VideoProcessor va, vb;

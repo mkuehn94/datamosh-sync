@@ -23,7 +23,32 @@ AudioAnalyzer::AudioAnalyzer() : duration(0) {
 AudioAnalyzer::~AudioAnalyzer() {
 }
 
-// same trick as mux_audio in main.cpp. decoding audio by hand with
+// glue the audio back on with ffmpeg, the render is silent
+// (lives here now, was in main.cpp, its all ffmpeg forks anyway)
+int mux_audio(const string& video, const string& audio_src, const string& out) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // child
+        execlp("ffmpeg", "ffmpeg",
+               "-i", video.c_str(),
+               "-i", audio_src.c_str(),
+               "-c:v", "copy",
+               "-c:a", "copy",
+               "-map", "0:v:0",
+               "-map", "1:a:0",
+               "-shortest",
+               out.c_str(),
+               "-y",
+               "-loglevel", "error",
+               (char*)nullptr);
+        exit(1);  // execlp failed
+    }
+    int status;
+    waitpid(pid, &status, 0);
+    return WEXITSTATUS(status);
+}
+
+// same trick as mux_audio. decoding audio by hand with
 // libav + resampling is a ton of code, ffmpeg can just pipe us raw floats
 static bool read_pcm(const string& path, vector<float>& out) {
     int fd[2];
