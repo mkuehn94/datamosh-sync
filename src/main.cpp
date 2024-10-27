@@ -1,7 +1,7 @@
 // datamosh music sync - main entry
 // TODO: clean this up later
 
-#include <iostream>
+#include <cstdio>
 #include <string>
 #include <cstdlib>
 #include <unistd.h>
@@ -24,7 +24,7 @@ static float shorter_video(const string& a, const string& b) {
     VideoProcessor va, vb;
     if (!va.open(a) || !vb.open(b)) return 0;
     double d = va.get_duration() < vb.get_duration() ? va.get_duration() : vb.get_duration();
-    cout << "[other] output will be " << d << "s" << endl;
+    printf("[other] output will be %gs\n", d);
     return d;
 }
 
@@ -52,7 +52,7 @@ static float parse_arg(const char* a) {
 }
 
 int main(int argc, char** argv) {
-    cout << "datamosh-sync v0.3" << endl;
+    printf("datamosh-sync v0.3\n");
 
     // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was
     string other_path = "";
@@ -75,8 +75,8 @@ int main(int argc, char** argv) {
     }
 
     if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <video> [audio]" << endl;
-        cerr << "  If audio is omitted, will try to extract from video" << endl;
+        fprintf(stderr, "Usage: %s <video> [audio]\n", argv[0]);
+        fprintf(stderr, "  If audio is omitted, will try to extract from video\n");
         return 1;
     }
 
@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
             use_embedded_audio = true;
         }
     } else {
-        cout << "No separate audio file, trying embedded audio..." << endl;
+        printf("No separate audio file, trying embedded audio...\n");
         use_embedded_audio = true;
     }
 
@@ -132,16 +132,16 @@ int main(int argc, char** argv) {
     VideoMosher mosher;
     if (!other_path.empty()) mosher.song_limit = shorter_video(video_path, other_path);
 
-    cout << "initializing..." << endl;
+    printf("initializing...\n");
 
     if (use_embedded_audio) {
         if (!mosher.init_with_embedded_audio(video_path)) {
-            cerr << "Failed to initialize (no audio in video?)" << endl;
+            fprintf(stderr, "Failed to initialize (no audio in video?)\n");
             return 1;
         }
     } else {
         if (!mosher.init(video_path, audio_path)) {
-            cerr << "Failed to initialize" << endl;
+            fprintf(stderr, "Failed to initialize\n");
             return 1;
         }
     }
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
         params.color_shift      = parse_arg(argv[6]);
         params.block_shuffle    = parse_arg(argv[7]);
         params.beat_sync        = parse_arg(argv[8]);
-        cout << "using custom params from args" << endl;
+        printf("using custom params from args\n");
     }
     // <rot> <warp> <quake> <spectral> go after those
     if (argc >= 13) {
@@ -206,9 +206,9 @@ int main(int argc, char** argv) {
     if (argc > 30) params.swing = parse_arg(argv[30]);
     params.cross = cross_amount;
 
-    cout << "processing..." << endl;
+    printf("processing...\n");
     if (!mosher.process_video(tmp_path, params)) {
-        cerr << "Processing failed" << endl;
+        fprintf(stderr, "Processing failed\n");
         return 1;
     }
 
@@ -216,19 +216,19 @@ int main(int argc, char** argv) {
     // just call ffmpeg directly, way simpler
     // if separate audio was given, use that; otherwise use the video's own audio
     string audio_src = (use_embedded_audio || audio_path.empty()) ? video_path : audio_path;
-    cout << "muxing audio from " << audio_src << "..." << endl;
+    printf("muxing audio from %s...\n", audio_src.c_str());
 
     int ret = mux_audio(tmp_path, audio_src, out_path);
     if (ret != 0) {
-        cerr << "audio mux failed (exit " << ret << "), output has no audio" << endl;
+        fprintf(stderr, "audio mux failed (exit %d), output has no audio\n", ret);
         rename(tmp_path.c_str(), out_path.c_str());
     } else {
         remove(tmp_path.c_str());
-        cout << "output: " << out_path << endl;
+        printf("output: %s\n", out_path.c_str());
     }
 
     if (!mixed_file.empty()) remove(mixed_file.c_str());
 
-    cout << "done!" << endl;
+    printf("done!\n");
     return 0;
 }
