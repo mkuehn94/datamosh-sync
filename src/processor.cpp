@@ -32,7 +32,6 @@ VideoProcessor::~VideoProcessor() {
 
 bool VideoProcessor::open(const string& path) {
     cout << "[vp] opening " << path << endl;
-    // open video file
     if (avformat_open_input(&fmt_ctx, path.c_str(), nullptr, nullptr) < 0) {
         cerr << "Could not open video file: " << path << endl;
         return false;
@@ -42,7 +41,6 @@ bool VideoProcessor::open(const string& path) {
     avformat_find_stream_info(fmt_ctx, nullptr);
 
     cout << "[vp] finding video stream..." << endl;
-    // find video stream
     for (unsigned int i = 0; i < fmt_ctx->nb_streams; i++) {
         if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_stream_idx = i;
@@ -55,7 +53,6 @@ bool VideoProcessor::open(const string& path) {
         return false;
     }
 
-    // get codec
     AVCodecParameters* codecpar = fmt_ctx->streams[video_stream_idx]->codecpar;
     const AVCodec* codec = avcodec_find_decoder(codecpar->codec_id);
     codec_ctx = avcodec_alloc_context3(codec);
@@ -160,7 +157,6 @@ uint8_t* VideoProcessor::get_frame_data() {
 }
 
 uint8_t* VideoProcessor::get_frame_rgb() {
-    // initialize converter if needed
     if (!sws_ctx) {
         sws_ctx = sws_getContext(
             width, height, codec_ctx->pix_fmt,
@@ -168,24 +164,14 @@ uint8_t* VideoProcessor::get_frame_rgb() {
             SWS_BILINEAR, nullptr, nullptr, nullptr
         );
 
-
-        // allocate RGB frame and buffer
         frame_rgb = av_frame_alloc();
-        int numBytes = width * height * 3;  // RGB24 = 3 bytes per pixel
-        rgb_buffer = (uint8_t*)malloc(numBytes);
-
-        // setup frame_rgb to point to rgb_buffer
+        rgb_buffer = (uint8_t*)malloc(width * height * 3);
         frame_rgb->data[0] = rgb_buffer;
         frame_rgb->linesize[0] = width * 3;
     }
 
-    // convert YUV to RGB
-    sws_scale(
-        sws_ctx,
-        frame->data, frame->linesize, 0, height,
-        frame_rgb->data, frame_rgb->linesize
-    );
-
+    sws_scale(sws_ctx, frame->data, frame->linesize, 0, height,
+              frame_rgb->data, frame_rgb->linesize);
     return rgb_buffer;
 }
 

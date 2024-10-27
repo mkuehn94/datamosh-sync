@@ -19,8 +19,7 @@ string get_basename(const string& path) {
     return name;
 }
 
-// run ffmpeg to mux audio into video
-// returns 0 on success
+// glue the audio back on with ffmpeg, the render above is silent
 int mux_audio(const string& video, const string& audio_src, const string& out) {
     pid_t pid = fork();
     if (pid == 0) {
