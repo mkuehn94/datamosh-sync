@@ -28,4 +28,5 @@ def main():
         i += 1
     curses.endwin()
 
-main()
+if __name__ == "__main__":
+    main()

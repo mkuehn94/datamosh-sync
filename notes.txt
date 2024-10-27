@@ -1,6 +1,8 @@
 datamosh sync notes
 ===================
 
+Scratch notes from earlier implementations; see README.md for current usage.
+
 ideas:
 - motion vector corruption (classic datamosh look) ✓
 - jpeg artifact amplification ✓ (kind of)

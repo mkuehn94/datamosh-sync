@@ -162,6 +162,7 @@ private:
     AVFrame* enc_frame;
     struct SwsContext* enc_sws_ctx;
     int64_t next_pts;
+    bool enc_header_written;
 
     // std::string input_video_path;  // REMOVED
 };

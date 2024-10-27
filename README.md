@@ -1,46 +1,204 @@
-datamoshing where the artifacts follow the beat instead of whatever
-the encoder thought was funny.
+## datamosh-sync 
 
-the pipeline is three steps, all of it ffmpeg + numpy:
+A tool to datamosh one or two videos following a song.
+This was created for music videos and just "digital art" and for me
+to learn more about encoding.
 
-    scripts/frames.sh clip.mp4 frames.rgb
-    datamosh.py frames.rgb W H blocks.mv [beats.txt [fps]]
-    scripts/gif.sh                     # out/frames -> mp4 + gif
+This was tested only on linux around kernel 6.6. If ports are wanted just create
+an issue, same for bugs, i'll try to fix it.
 
-the block matcher is not in this repo, it writes the sidecar:
+![the track](docs/track.png)
 
-    f x y w h dx dy mode
+This tool can be used fully from CLI for there is also a convenient GUI.
+Input one or two videos and optionally a mp3 track (otherwise the audio
+track of one of the videos will be used)
 
-one line per macroblock, `f` the frame the vector belongs to. `mode` is
-`hold`, `drop` or `freeze`, nothing reads `drop` yet.
+On the left you can set the scale of the effects. Be careful, some effect are REALLY
+sensitive to small changes and can cause a complete indistinguishable noise
+like pattern. (i.e. HALL).
+All of the effects are explained visually later anyways, which is much easier than
+to explain by text. Actually as you can see to scale/intensity still changes according
+to the music, so imagine this to be a mean of some distribution.
 
-with a beats.txt (one ms timestamp per line, scripts/beats.sh makes one
-from a wav) the vectors get quantized: one vector per beat, first one
-wins, the rest of the beat is the freeze of that block. that is the
-whole sync idea, the beat grid decides where a block starts.
+On the right you can set how much of the footage is affected in percent. 1 = effect for
+the whole output video, 0.1 = effect active 10% of the video.
 
-viewer.py plays raw RGB in the terminal. viewer2.py opens a Tk window
-and needs tkinter, Pillow and a display.
+If you don't want to set those things manually (i don't blame you, long videos take 
+quite a lot of time to process) click on the AUTO PARTS button, which searches for a 
+good combination according to your music.
+
+## The Effects
+
+You can look up how they work internally, but here is a very simple example of the
+effects in action:
+Those are every effect on max (1) on the same input footage (some drone footage of mine)
+### nothing on, for comparison
+
+| | | |
+|---|---|---|
+| ![nothing on, for comparison 1](docs/effects/off_1.jpg) | ![nothing on, for comparison 2](docs/effects/off_2.jpg) | ![nothing on, for comparison 3](docs/effects/off_3.jpg) |
+
+### ROT
+
+simulates the decoder losing its keyframes: image and motion stay behind to a certain degree. Especially colors from earlier scenes "shift" into new scenes, which makes this quite unique.
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 1 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![ROT 1](docs/effects/rot_1.jpg) | ![ROT 2](docs/effects/rot_2.jpg) | ![ROT 3](docs/effects/rot_3.jpg) |
+
+### WARP
+
+distorts the image from rot in a direction vector in a certain block size. direction vector is controlled by the music (kick push them out of the center, bass pulls them back)
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 1 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![WARP 1](docs/effects/warp_1.jpg) | ![WARP 2](docs/effects/warp_2.jpg) | ![WARP 3](docs/effects/warp_3.jpg) |
+
+### TIME QUAKE
+
+one of the more silly type of effects, The "Circle" borrows frames from a slightly different time of the video. kicks in the music are simulated like "shokwaves". Sometimes i turn this fully off because it feels kind of "forced"
+ 
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 1 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![TIME QUAKE 1](docs/effects/quake_1.jpg) | ![TIME QUAKE 2](docs/effects/quake_2.jpg) | ![TIME QUAKE 3](docs/effects/quake_3.jpg) |
+
+### SPECTRAL LAG
+
+This actually IS a strong effect, but hard to capture on screenshots. Image blocks are split into different frequencies using 8x8 DCT with different delays. Look how there are Edges of objects from frames way before.
+
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 1 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![SPECTRAL LAG 1](docs/effects/spectral_1.jpg) | ![SPECTRAL LAG 2](docs/effects/spectral_2.jpg) | ![SPECTRAL LAG 3](docs/effects/spectral_3.jpg) |
+
+### MOTION SAMPLER
+
+8 Beats of motion vectors are recorded and looped over the current picture based on music, resulting in the smearing and almost stained glass like effect.
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 1 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![MOTION SAMPLER 1](docs/effects/groove_1.jpg) | ![MOTION SAMPLER 2](docs/effects/groove_2.jpg) | ![MOTION SAMPLER 3](docs/effects/groove_3.jpg) |
+
+### TEXTURE SWAP
+
+quite a chaotic effect, it swaps the textures of blocks randomly. But look at how lighting is completely unaffected by this even on full scale.
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 1 0 0
+```
+
+| | | |
+|---|---|---|
+| ![TEXTURE SWAP 1](docs/effects/texswap_1.jpg) | ![TEXTURE SWAP 2](docs/effects/texswap_2.jpg) | ![TEXTURE SWAP 3](docs/effects/texswap_3.jpg) |
+
+### RECURSION
+
+copies into copies into copies :D
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 1 0
+```
+
+| | | |
+|---|---|---|
+| ![RECURSION 1](docs/effects/recursion_1.jpg) | ![RECURSION 2](docs/effects/recursion_2.jpg) | ![RECURSION 3](docs/effects/recursion_3.jpg) |
+
+### HALL OF MIRRORS
+
+My favorite effect. The image stays persistant but moving objects "lag behind" or fail to update. It's the exact effect some videogames give you for a corrupted framebuffer.
+```
+./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 0 1
+```
+
+| | | |
+|---|---|---|
+| ![HALL OF MIRRORS 1](docs/effects/hom_1.jpg) | ![HALL OF MIRRORS 2](docs/effects/hom_2.jpg) | ![HALL OF MIRRORS 3](docs/effects/hom_3.jpg) |
+
+### motion blur / trails
+
+only really interning in combination with other effects tbh.
+```
+./datamosh-sync video.mp4 "" 0 100 1 0 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![motion blur / trails 1](docs/effects/blur_1.jpg) | ![motion blur / trails 2](docs/effects/blur_2.jpg) | ![motion blur / trails 3](docs/effects/blur_3.jpg) |
+
+### THE VOID
+
+VOID scale 1, tolerance = 0
+
+```
+./datamosh-sync video.mp4 "" 0 0 0 1 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![THE VOID 1](docs/effects/void_1.jpg) | ![THE VOID 2](docs/effects/void_2.jpg) | ![THE VOID 3](docs/effects/void_3.jpg) |
+
+### stuck overlay
+
+for glitch to work
+
+```
+./datamosh-sync video.mp4 "" 0.5 100 0 0 1 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![stuck overlay 1](docs/effects/stuck_1.jpg) | ![stuck overlay 2](docs/effects/stuck_2.jpg) | ![stuck overlay 3](docs/effects/stuck_3.jpg) |
+
+### glitch
+
+One of the more famous and replicated effects in video editing etc.
+
+```
+./datamosh-sync video.mp4 "" 1 100 0 0 0 0 0 0 0 0 0 0 0 0
+```
+
+| | | |
+|---|---|---|
+| ![glitch 1](docs/effects/glitch_1.jpg) | ![glitch 2](docs/effects/glitch_2.jpg) | ![glitch 3](docs/effects/glitch_3.jpg) |
+
 
 ## C++ implementation
 
-trying a C++ version with proper GUI and real-time control. way faster.
+Basic GTK GUI. effects apply on the decoded frames before the encoding.
+So the existing motion vectors and not directly altered.
 
-src/ contains the new implementation:
-- processor: ffmpeg wrapper for reading video + the main loop
-- audio_analyzer: real beat detection now (spectral flux), bass/treble curves
-- warp: fake decoder. rot, warp, time quake, spectral lag
-- effects: all the datamosh effects
-- gui: gtk3 interface with parameter sliders
+src/ 
+- processor: wrapper for ffmpeg. reading video & the main loop
+- audio_analyzer: using spectral flux to detect essential parts of the song, bass/treble curves
+- warp: "fake" decoder used for effects: rot, warp, time quake, spectral lag
+- effects: all the effects. (feel free to use any in your own project if you like it)
+- gui: simple GTK interface with sliders and buttons and track preview.
 - stream_corrupter: experimental h264 NAL manipulation
 
-build with `make`, run with:
+## Build and Use
+
+install all necessary dependencies them simply `make`. If it doesn't work refer to [HOW TO BUILD](./BUILD.md)
 ```
-./datamosh-sync video.mp4              # uses embedded audio
-./datamosh-sync video.mp4 audio.mp3    # separate audio file
+./datamosh-sync video.mp4               # uses embedded audio
+./datamosh-sync video.mp4 audio.mp3     # separate audio file
+./datamosh-sync video.mp4 video2.mp4    # moshes two video together with roughly 50% of both, track auto calculated.
 ```
 
-the good stuff (src/warp.cpp), all 0-1, all follow the music:
+all 0-1 effects follow the music:
 
 - ROT: decoder that lost its keyframes. real vectors + real residuals applied
   to a canvas that never gets refreshed. brightness heals before color so
@@ -83,8 +241,6 @@ the good stuff (src/warp.cpp), all 0-1, all follow the music:
 every effect has a second slider, how much of the song it plays. 1 = the whole
 time, .3 = about 30%. so you can turn things up high and they dont all pile up,
 it plays more like a track than effects on top of each other
-
-![the track](docs/track.png)
 
 how it decides:
 
@@ -221,185 +377,15 @@ even when the track says otherwise, i kept it
 
 two videos have their own violence table in src/arrange.cpp, they hit harder
 
-```
-# all of it, arranged
-./datamosh-sync --other other.mp4 --music a --cross 0.35 video.mp4 "" 0.5 30 0.2 0.7 0.5 0.6 0.25 0.15 0.35 0.6 0.2 0.5 0.6 0.5  0.25 0.2 0.25 0.15 0.3 0.3 0.2 0.25 0.25 0.2 0.2 0.2 0.25 1
-```
+## Legacy code and remaining work
 
+Some older effects remain in src/effects.cpp but are not used by the current
+render loop. The function named jpeg_corruption is an RGB-noise placeholder,
+not actual JPEG/DCT corruption. Codec-level I-frame/P-frame methods are stubs.
 
+FFmpeg supports raw RGB through `-f rawvideo -pix_fmt rgb24`, which frames.sh
+uses. Processed Python frames are saved as a PPM image sequence for gif.sh.
 
-every effect alone at max, everything else off. 3 random 5 sec clips from a drone video,
-screenshot is the last frame of the clip unless it says otherwise. full size is 1440x1080, these are shrunk
+See [BUILD.md](BUILD.md) for dependencies and tests, and
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) / [TODO.md](TODO.md) for remaining work.
 
-### nothing on, for comparison
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![nothing on, for comparison 1](docs/effects/off_1.jpg) | ![nothing on, for comparison 2](docs/effects/off_2.jpg) | ![nothing on, for comparison 3](docs/effects/off_3.jpg) |
-
-### ROT
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 1 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![ROT 1](docs/effects/rot_1.jpg) | ![ROT 2](docs/effects/rot_2.jpg) | ![ROT 3](docs/effects/rot_3.jpg) |
-
-### WARP
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 1 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![WARP 1](docs/effects/warp_1.jpg) | ![WARP 2](docs/effects/warp_2.jpg) | ![WARP 3](docs/effects/warp_3.jpg) |
-
-### TIME QUAKE
-
-look at the block edges, cars and trees dont line up
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 1 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![TIME QUAKE 1](docs/effects/quake_1.jpg) | ![TIME QUAKE 2](docs/effects/quake_2.jpg) | ![TIME QUAKE 3](docs/effects/quake_3.jpg) |
-
-### SPECTRAL LAG
-
-subtle in a still, look at the edges
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 1 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![SPECTRAL LAG 1](docs/effects/spectral_1.jpg) | ![SPECTRAL LAG 2](docs/effects/spectral_2.jpg) | ![SPECTRAL LAG 3](docs/effects/spectral_3.jpg) |
-
-### MOTION SAMPLER
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 1 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![MOTION SAMPLER 1](docs/effects/groove_1.jpg) | ![MOTION SAMPLER 2](docs/effects/groove_2.jpg) | ![MOTION SAMPLER 3](docs/effects/groove_3.jpg) |
-
-### TEXTURE SWAP
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 1 0 0
-```
-
-| | | |
-|---|---|---|
-| ![TEXTURE SWAP 1](docs/effects/texswap_1.jpg) | ![TEXTURE SWAP 2](docs/effects/texswap_2.jpg) | ![TEXTURE SWAP 3](docs/effects/texswap_3.jpg) |
-
-### RECURSION
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 1 0
-```
-
-| | | |
-|---|---|---|
-| ![RECURSION 1](docs/effects/recursion_1.jpg) | ![RECURSION 2](docs/effects/recursion_2.jpg) | ![RECURSION 3](docs/effects/recursion_3.jpg) |
-
-### HALL OF MIRRORS
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 0 0 0 0 0 0 0 0 1
-```
-
-| | | |
-|---|---|---|
-| ![HALL OF MIRRORS 1](docs/effects/hom_1.jpg) | ![HALL OF MIRRORS 2](docs/effects/hom_2.jpg) | ![HALL OF MIRRORS 3](docs/effects/hom_3.jpg) |
-
-### motion blur / trails
-
-```
-./datamosh-sync video.mp4 "" 0 100 1 0 0 0 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![motion blur / trails 1](docs/effects/blur_1.jpg) | ![motion blur / trails 2](docs/effects/blur_2.jpg) | ![motion blur / trails 3](docs/effects/blur_3.jpg) |
-
-### THE VOID
-
-void depth 1 + void tolerance 0. tolerance does nothing by itself. *worst frame of the clip*, not the end one
-
-```
-./datamosh-sync video.mp4 "" 0 0 0 1 0 0 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![THE VOID 1](docs/effects/void_1.jpg) | ![THE VOID 2](docs/effects/void_2.jpg) | ![THE VOID 3](docs/effects/void_3.jpg) |
-
-### stuck overlay
-
-glitch has to be on or nothing ever gets stuck, so glitch is at .5 here
-
-```
-./datamosh-sync video.mp4 "" 0.5 100 0 0 1 0 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![stuck overlay 1](docs/effects/stuck_1.jpg) | ![stuck overlay 2](docs/effects/stuck_2.jpg) | ![stuck overlay 3](docs/effects/stuck_3.jpg) |
-
-### glitch
-
-only hits on loud parts, the patches are the stuck overlay it also triggers. *worst frame of the clip*, not the end one
-
-```
-./datamosh-sync video.mp4 "" 1 100 0 0 0 0 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![glitch 1](docs/effects/glitch_1.jpg) | ![glitch 2](docs/effects/glitch_2.jpg) | ![glitch 3](docs/effects/glitch_3.jpg) |
-
-### beat sync
-
-honestly you cant see this one in a still, its a zoom punch + freeze on the beat. *worst frame of the clip*, not the end one
-
-```
-./datamosh-sync video.mp4 "" 0 100 0 0 0 1 0 0 0 0 0 0 0 0
-```
-
-| | | |
-|---|---|---|
-| ![beat sync 1](docs/effects/beatsync_1.jpg) | ![beat sync 2](docs/effects/beatsync_2.jpg) | ![beat sync 3](docs/effects/beatsync_3.jpg) |
-
-old effects list:
-- motion vector glitching
-- jpeg corruption
-- block shuffling
-- color channel shifts  
-- beat-synced pulse/zoom
-- wave distortion
-
-still need to:
-- implement actual I-frame removal
-- add video preview to GUI
-- optimize the slow effects
-- add export functionality
-
-## todo
-
-- `drop` vectors, a block that drops should pull the frame behind
-  it instead of freezing
-- beat grid from the wav inside the python instead of scripts/beats.sh
-- raw RGB uses FFmpeg rawvideo; PPM sequences use image2

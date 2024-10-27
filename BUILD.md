@@ -1,90 +1,69 @@
-# Building datamosh-sync
+# Build and test
 
-## Prerequisites
+Linux build needs C++11, OpenMP, FFmpeg development libraries and GTK 3.
+The `ffmpeg` and `ffprobe` commands must also be on PATH for audio and tests.
 
-You need these libraries installed:
-
-### Ubuntu/Debian:
-```bash
-sudo apt install build-essential pkg-config
-sudo apt install libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+Ubuntu/Debian:
+```sh
+sudo apt install build-essential pkg-config ffmpeg libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libgtk-3-dev python3-numpy python3-pil python3-tk
 ```
 
-### Arch Linux:
-```bash
-sudo pacman -S base-devel ffmpeg
+Arch Linux:
+```sh
+sudo pacman -S base-devel pkgconf ffmpeg gtk3 python-numpy python-pillow tk
 ```
 
-### macOS (Homebrew):
-```bash
-brew install ffmpeg pkg-config
-```
-
-## Build
-
-Just run make:
-```bash
+Build both CLI and GUI:
+```sh
 make
 ```
 
-If it works, you'll see:
-```
-g++ -Wall -Wextra -g -std=c++11 -c src/main.cpp -o obj/main.o
-...
-Built datamosh-sync
+Build CLI only (no GTK required):
+```sh
+make datamosh-sync
 ```
 
-## Usage
-
-### With embedded audio (easier):
-```bash
+Run:
+```sh
 ./datamosh-sync input_video.mp4
-```
-
-### With separate audio file:
-```bash
 ./datamosh-sync input_video.mp4 music.mp3
+./datamosh-gui
 ```
 
-The tool will:
-1. Load video and audio
-2. Analyze audio for beats (fake beats for now, placeholder)
-3. Apply datamosh effects synced to beats
-4. Process frames with effects
+CLI renders `<input_basename>_munched.mp4` in the current directory. With a
+second video, name includes both basenames. It renders a silent intermediate,
+then runs FFmpeg to mux audio. If muxing fails, it keeps the silent video and
+prints a warning.
 
-**NOTE:** Output encoding not implemented yet, so it processes but doesn't save!
-Check TODO.md for what's still missing.
+## Tests
+
+```sh
+make check
+./test.sh
+```
+
+`make check` runs pixel-effect assertions, legacy Python block-shift checks,
+and script/viewer tests. `test.sh` also generates a short test video, exercises
+the video reader, renders it and verifies decodable video and audio streams.
+It does not need private clips. Python tests need NumPy and Pillow; Tk test
+needs tkinter and a display. With Xvfb installed:
+
+```sh
+xvfb-run -a make check
+```
+
+These are regression and smoke checks, not exhaustive coverage of all effects.
 
 ## Troubleshooting
 
-### "libavformat not found"
-Install ffmpeg dev libraries (see Prerequisites above)
+- Missing `gtk/gtk.h`: install GTK 3 development files, or build CLI only.
+- Missing FFmpeg headers or link libraries: install development packages above.
+  For a nonstandard install, supply include/link paths through `CFLAGS` and
+  `LDFLAGS`; Makefile does not use FFmpeg's pkg-config metadata.
+- Encoder unavailable: FFmpeg build must provide an H.264 encoder, normally
+  libx264. Odd image dimensions may fail with YUV420P output.
+- Stale objects after switching revisions: `make clean && make`.
 
-### "cannot find -lavcodec"
-Your ffmpeg might be in a non-standard location. Try:
-```bash
-export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-make clean && make
-```
-
-### Segfault when running
-Probably trying to read a corrupt video or format we don't handle.
-Try with a simple h264 .mp4 file first.
-
-## Clean build
-
-```bash
-make clean
-make
-```
-
-## What gets built
-
-- Binary: `datamosh-sync` 
-- Object files: `obj/*.o`
-- No installation needed, run from current directory
-
----
-
-If it compiles but crashes or doesn't work, that's expected!
-This is WIP and several features are stubs. See notes.txt and TODO.md.
+`make clean` removes binaries and `obj/`. Generated binaries and Python caches
+are ignored, not source artifacts. macOS is not currently validated; default
+OpenMP/compiler flags target Linux.

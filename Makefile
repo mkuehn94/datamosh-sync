@@ -40,8 +40,19 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/*.h
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(OBJDIR)/test_effect: test_effect.cpp $(OBJDIR)/effects.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(OBJDIR)/test_basic: test_basic.cpp $(filter-out $(OBJDIR)/main.o,$(CORE_OBJECTS))
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+check: $(OBJDIR)/test_effect
+	./$(OBJDIR)/test_effect
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tests/test_shift.py
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p 'test_tools.py'
+
 clean:
 	rm -rf $(OBJDIR) $(TARGET) $(GUI_TARGET)
 	@echo "Cleaned"
 
-.PHONY: all clean
+.PHONY: all clean check

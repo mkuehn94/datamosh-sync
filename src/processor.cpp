@@ -73,16 +73,21 @@ bool VideoProcessor::open(const string& path) {
 }
 
 void VideoProcessor::close() {
-    if (rgb_buffer) free(rgb_buffer);
-    if (sized_buffer) free(sized_buffer);
-    if (sized_tmp) free(sized_tmp);
+    free(rgb_buffer);
+    free(sized_buffer);
+    free(sized_tmp);
+    rgb_buffer = sized_buffer = sized_tmp = nullptr;
     if (sized_ctx) sws_freeContext(sized_ctx);
+    sized_ctx = nullptr;
     if (frame_rgb) av_frame_free(&frame_rgb);
     if (sws_ctx) sws_freeContext(sws_ctx);
+    sws_ctx = nullptr;
     if (frame) av_frame_free(&frame);
     if (packet) av_packet_free(&packet);
     if (codec_ctx) avcodec_free_context(&codec_ctx);
     if (fmt_ctx) avformat_close_input(&fmt_ctx);
+    video_stream_idx = -1;
+    width = height = 0;
 }
 
 bool VideoProcessor::read_frame() {
@@ -189,6 +194,7 @@ VideoMosher::VideoMosher() {
     enc_frame = nullptr;
     enc_sws_ctx = nullptr;
     next_pts = 0;
+    enc_header_written = false;
     prev_rgb = nullptr;
     prev_rgb_size = 0;
     ghost_buf = nullptr;
@@ -247,6 +253,8 @@ VideoMosher::~VideoMosher() {
     if (audio) delete audio;
     if (effects) delete effects;
     if (warp) delete warp;
+    delete other;
+    delete other_eyes;
 }
 
 bool VideoMosher::init(const string& video_path, const string& audio_path) {
@@ -983,16 +991,20 @@ bool VideoMosher::process_video(const string& output_path, ProcessParams p) {
 
 bool VideoMosher::setup_encoder(const string& output_path, int width, int height, AVRational rate) {
     // create output context
-    avformat_alloc_output_context2(&output_ctx, nullptr, nullptr, output_path.c_str());
+    if (avformat_alloc_output_context2(&output_ctx, nullptr, nullptr, output_path.c_str()) < 0)
+        return false;
     
     // find H264 encoder
     const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-    
+    if (!codec) return false;
+
     // create stream
     out_stream = avformat_new_stream(output_ctx, nullptr);
-    
+    if (!out_stream) return false;
+
     // allocate encoder context
     enc_ctx = avcodec_alloc_context3(codec);
+    if (!enc_ctx) return false;
     enc_ctx->width = width;
     enc_ctx->height = height;
     enc_ctx->time_base = av_inv_q(rate);
@@ -1038,14 +1050,16 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
     }
     
     // write header
-    avformat_write_header(output_ctx, nullptr);
+    if (avformat_write_header(output_ctx, nullptr) < 0) return false;
+    enc_header_written = true;
     
     // setup frame for encoding
     enc_frame = av_frame_alloc();
+    if (!enc_frame) return false;
     enc_frame->format = AV_PIX_FMT_YUV420P;
     enc_frame->width = width;
     enc_frame->height = height;
-    av_frame_get_buffer(enc_frame, 0);
+    if (av_frame_get_buffer(enc_frame, 0) < 0) return false;
     
     // setup RGB to YUV converter
     enc_sws_ctx = sws_getContext(
@@ -1058,16 +1072,8 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
 
     printf("encoder setup complete: %dx%d @ %g fps\n", width, height, fps);
 
-    // try to copy audio stream
-    // TODO: this is kinda hacky but works
-    // TEMP DISABLED: bad_alloc on large videos, need to fix
-    /*
-    if (!copy_audio_stream()) {
-        printf("warning: could not copy audio (output will be silent)\n");
-        // not fatal, video still works
-    }
-    */
-    printf("audio copying disabled temporarily (memory issues)\n");
+    // Audio is muxed by ffmpeg after the video render.
+    if (!enc_sws_ctx) return false;
 
     return true;
 }
@@ -1075,7 +1081,13 @@ bool VideoMosher::setup_encoder(const string& output_path, int width, int height
 void VideoMosher::encode_frame(uint8_t* rgb_data) {
     int width = enc_ctx->width;
     int height = enc_ctx->height;
-    
+
+    // Encoder may still hold a reference to the previous frame's buffers.
+    if (av_frame_make_writable(enc_frame) < 0) {
+        fprintf(stderr, "Could not make encoder frame writable\n");
+        return;
+    }
+
     // convert RGB to YUV420P
     uint8_t* src_data[1] = { rgb_data };
     int src_linesize[1] = { width * 3 };
@@ -1112,12 +1124,12 @@ void VideoMosher::encode_frame(uint8_t* rgb_data) {
 }
 
 void VideoMosher::finish_encoding() {
-    if (!output_ctx) return;  // already finished or never started
+    if (!output_ctx && !enc_ctx && !enc_frame && !enc_sws_ctx) return;
 
     printf("finishing encoding...\n");
 
-    // flush encoder
-    if (enc_ctx) {
+    // Only flush if setup reached a writable stream.
+    if (enc_ctx && enc_header_written) {
         avcodec_send_frame(enc_ctx, nullptr);
 
         AVPacket* pkt = av_packet_alloc();
@@ -1131,48 +1143,8 @@ void VideoMosher::finish_encoding() {
         av_packet_free(&pkt);
     }
 
-    // copy audio packets if we have audio stream
-    // DISABLED - broken, need to fix later
-    // TODO: this whole section needs rewrite
-    /*
-    if (audio_out_stream) {
-        printf("copying audio packets...\n");
-        AVFormatContext* input_ctx = nullptr;
-
-        if (avformat_open_input(&input_ctx, nullptr, nullptr, nullptr) >= 0) {
-            avformat_find_stream_info(input_ctx, nullptr);
-
-            // find audio stream
-            int audio_idx = -1;
-            for (unsigned int i = 0; i < input_ctx->nb_streams; i++) {
-                if (input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-                    audio_idx = i;
-                    break;
-                }
-            }
-
-            if (audio_idx >= 0) {
-                AVPacket* pkt = av_packet_alloc();
-                while (av_read_frame(input_ctx, pkt) >= 0) {
-                    if (pkt->stream_index == audio_idx) {
-                        av_packet_rescale_ts(pkt, input_ctx->streams[audio_idx]->time_base,
-                                           nullptr);
-                        pkt->stream_index = 1;
-                        av_interleaved_write_frame(output_ctx, pkt);
-                    }
-                    av_packet_unref(pkt);
-                }
-                av_packet_free(&pkt);
-                printf("audio copied\n");
-            }
-
-            avformat_close_input(&input_ctx);
-        }
-    }
-    */
-
     // write trailer
-    if (output_ctx) {
+    if (output_ctx && enc_header_written) {
         printf("writing trailer...\n");
         av_write_trailer(output_ctx);
         printf("trailer written\n");
@@ -1184,10 +1156,16 @@ void VideoMosher::finish_encoding() {
         sws_freeContext(enc_sws_ctx);
         enc_sws_ctx = nullptr;
     }
-    // Cleanup disabled pending an ownership fix; these allocations leak.
-    enc_frame = nullptr;
-    enc_ctx = nullptr;
-    output_ctx = nullptr;
-    printf("encoder cleanup done (skipped some frees to avoid crash)\n");
+    av_frame_free(&enc_frame);
+    avcodec_free_context(&enc_ctx);
+    if (output_ctx) {
+        if (!(output_ctx->oformat->flags & AVFMT_NOFILE) && output_ctx->pb)
+            avio_closep(&output_ctx->pb);
+        avformat_free_context(output_ctx);
+        output_ctx = nullptr;
+    }
+    out_stream = nullptr;
+    enc_header_written = false;
+    printf("encoder cleanup done\n");
 }
 

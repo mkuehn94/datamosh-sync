@@ -3,6 +3,8 @@ obj/
 *.o
 datamosh-sync
 datamosh-gui
+/test_basic
+/test_effect
 
 # generated video
 *.mp4
@@ -14,14 +16,11 @@ test_output/
 
 # python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 
 # editor / os
 *.swp
 *.swo
 *~
 .DS_Store
-*.py[cod]
-.pytest_cache/
-/test_basic
-/test_effect

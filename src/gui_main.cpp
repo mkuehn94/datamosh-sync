@@ -622,7 +622,6 @@ static void on_other_chooser_clicked(GtkWidget* widget, gpointer data) {
 }
 
 // helper: one row of the grid, label + how hard + (maybe) how much of the song
-// returns the GtkScale widget
 static int grid_row = 1;
 GtkWidget* make_slider(GtkWidget* grid, const char* label,
                         double min, double max, double val, double step, int fx = -1) {

@@ -52,6 +52,8 @@ static float parse_arg(const char* a) {
 }
 
 int main(int argc, char** argv) {
+    // GUI reads progress through a pipe, where stdout would otherwise be buffered.
+    setvbuf(stdout, nullptr, _IOLBF, 0);
     printf("datamosh-sync v0.3\n");
 
     // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was

@@ -56,7 +56,6 @@ void EffectEngine::motion_vector_glitch(uint8_t* data, int width, int height, fl
                 if (src_x >= 0 && src_x < width - block_size &&
                     src_y >= 0 && src_y < height - block_size) {
 
-                    // copy block
                     for (int by = 0; by < block_size; by++) {
                         int dst_idx = ((y + by) * width + x) * 3;
                         int src_idx = ((src_y + by) * width + src_x) * 3;
@@ -344,7 +343,6 @@ void EffectEngine::color_encode_corrupt(uint8_t* data, int width, int height, fl
     if (intensity <= 0.01f) return;
 
     int block = MACROBLOCK_SIZE;
-    // iterate per macroblock
     for (int by = 0; by < height; by += block) {
         for (int bx = 0; bx < width; bx += block) {
             // each block gets a random corruption based on intensity
@@ -425,7 +423,7 @@ void EffectEngine::ghost_stamp(uint8_t* data, int width, int height,
         if (dst_bx + block > width)  dst_bx = width  - block;
         if (dst_by + block > height) dst_by = height - block;
 
-        // copy block from data to ghost (overwrite, never clear)
+        // ghost gets stamped over, never cleared
         for (int y = 0; y < block && src_by + y < height && dst_by + y < height; y++) {
             int src_row = (src_by + y) * width + src_bx;
             int dst_row = (dst_by + y) * width + dst_bx;
