@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <sys/wait.h>
-#include "video_processor.h"
 #include "audio_analyzer.h"
 #include "processor.h"
 

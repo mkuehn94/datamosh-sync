@@ -3,7 +3,7 @@
 
 #include <string>
 #include <gtk/gtk.h>
-#include "video_processor.h"
+#include "processor.h"
 #include "audio_analyzer.h"
 #include "effects.h"
 

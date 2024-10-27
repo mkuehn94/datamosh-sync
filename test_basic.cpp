@@ -1,6 +1,6 @@
 // test if basic objects work at all
 #include <iostream>
-#include "src/video_processor.h"
+#include "src/processor.h"
 
 int main() {
     std::cout << "creating VideoProcessor..." << std::endl;

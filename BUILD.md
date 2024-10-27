@@ -30,7 +30,6 @@ make
 If it works, you'll see:
 ```
 g++ -Wall -Wextra -g -std=c++11 -c src/main.cpp -o obj/main.o
-g++ -Wall -Wextra -g -std=c++11 -c src/video_processor.cpp -o obj/video_processor.o
 ...
 Built datamosh-sync
 ```

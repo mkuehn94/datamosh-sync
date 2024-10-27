@@ -27,7 +27,7 @@ and needs tkinter, Pillow and a display.
 trying a C++ version with proper GUI and real-time control. way faster.
 
 src/ contains the new implementation:
-- video_processor: ffmpeg wrapper for reading video
+- processor: ffmpeg wrapper for reading video + the main loop
 - audio_analyzer: real beat detection now (spectral flux), bass/treble curves
 - warp: fake decoder. rot, warp, time quake, spectral lag
 - effects: all the datamosh effects
