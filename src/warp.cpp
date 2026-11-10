@@ -17,6 +17,10 @@ static inline uint8_t clamp8(int v) {
     return v < 0 ? 0 : (v > 255 ? 255 : v);
 }
 
+static inline int round_delta(float v) {
+    return (int)(v + (v >= 0.0f ? 0.5f : -0.5f));
+}
+
 // own random stream per effect instead of rand(). otherwise moving ANY
 // slider reshuffles everything and you cant tell what that slider did
 static inline float rnd(unsigned* seed) {
@@ -42,7 +46,6 @@ WarpEngine::WarpEngine() {
     other_rgb = nullptr;
     other_eyes = nullptr;
     other_amount = 0;
-    other_prev = nullptr;
     other_bar = 0;
     other_field_bar = -1;
     other_seed = 212223;
@@ -74,7 +77,6 @@ WarpEngine::WarpEngine() {
 WarpEngine::~WarpEngine() {
     free(luma); free(prev_luma); free(small); free(prev_small);
     free(canvas); free(canvas_tmp); free(prev_src);
-    free(other_prev);
     for (size_t i = 0; i < other_ring.size(); i++) free(other_ring[i]);
     free(recur_prev);
     free(hom_buf);
@@ -293,9 +295,16 @@ void WarpEngine::update_sampler(const AudioFrame& a) {
     if (a.kick) groove_punch = 0.4f + 0.6f * a.hit;
     else groove_punch *= pow(0.02f, dt / 0.15f);
 
-    // two videos: tape the motion of the other one
-    rec_x.push_back(other_on() ? other_eyes->mvx : mvx);
-    rec_y.push_back(other_on() ? other_eyes->mvy : mvy);
+    // Two videos: record the hybrid motion, not a preferred source.
+    rec_x.push_back(mvx);
+    rec_y.push_back(mvy);
+    if (other_on()) {
+        float blend = 0.5f * other_amount;
+        for (int i = 0; i < gx * gy; i++) {
+            rec_x.back()[i] = round_delta(mvx[i] * (1 - blend) + other_eyes->mvx[i] * blend);
+            rec_y.back()[i] = round_delta(mvy[i] * (1 - blend) + other_eyes->mvy[i] * blend);
+        }
+    }
     if (a.kick) {
         rec_kicks.push_back((int)rec_x.size() - 1);
         bar_kicks++;
@@ -340,16 +349,11 @@ void WarpEngine::update_sampler(const AudioFrame& a) {
 void WarpEngine::look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amount) {
     other_rgb = rgb;
     other_eyes = eyes;
-    other_amount = amount;
-    if (!other_prev) {
-        make_other_field();
-        other_prev = (uint8_t*)malloc(w * h * 3);
-        memcpy(other_prev, rgb, w * h * 3);
-    }
+    other_amount = max(0.0f, min(1.0f, amount));
+    if (other_field.empty()) make_other_field();
 }
 
-// where the other video shows through. random noise blurred a lot so you get blobs
-// and rifts with messy edges and not squares. 0-1 evenly so amount .3 really is 30%
+// Spatial field used by spectral lag only. DIMENSION has no ownership mask.
 void WarpEngine::make_other_field() {
     vector<float> f(gx * gy), t(gx * gy);
     for (int i = 0; i < gx * gy; i++) f[i] = rnd(&other_seed);
@@ -382,10 +386,25 @@ void WarpEngine::make_other_field() {
 
 void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a) {
     int size = w * h * 3;
+    const bool cross = other_on();
+    const float blend = cross ? 0.5f * other_amount : 0.0f;
+    const uint8_t* source = data;
+    if (cross) {
+        // Both videos feed ONE clean reference and ONE persistent canvas.
+        // Every pixel, including healing and edge strips, uses the same balance.
+        // No region belongs to a video; at DIMENSION=1 source order is irrelevant.
+        fused_src.resize(size);
+        #pragma omp parallel for
+        for (int i = 0; i < size; i++) {
+            fused_src[i] = round_delta(data[i] * (1 - blend) + other_rgb[i] * blend);
+        }
+        source = fused_src.data();
+    }
 
     if (!canvas_ready) {
-        memcpy(canvas, data, size);
-        memcpy(prev_src, data, size);
+        memcpy(canvas, source, size);
+        memcpy(prev_src, source, size);
+        memcpy(data, source, size);
         canvas_ready = true;
         return;
     }
@@ -432,27 +451,19 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
     vector<unsigned char> dice(gx * gy);
     for (int i = 0; i < gx * gy; i++) dice[i] = rand_r(&rot_seed) & 255;
 
+    // Motion, mode decisions, residuals and healing all describe the hybrid.
+    const bool cut = a.cut || (cross && other_eyes->cut_detected);
     #pragma omp parallel for schedule(dynamic, 4)
     for (int by = 0; by < gy; by++) {
         for (int bx = 0; bx < gx; bx++) {
             int idx = by * gx + bx;
             int x0 = bx * BLOCK, y0 = by * BLOCK;
             int mx = mvx[idx], my = mvy[idx];
-
-            // this chunk belongs to the other video? then the motion comes from there.
-            // this is the whole trick, the street moves like its in tokyo
-            // the whole block comes from over there, motion residual and healing
-            const uint8_t* src = data;
-            const uint8_t* prv = prev_src;
             int berr = block_err[idx];
-            if (other_eyes) {
-                if (other_field[idx] < other_amount) {
-                    mx = other_eyes->mvx[idx];
-                    my = other_eyes->mvy[idx];
-                    berr = other_eyes->block_err[idx];
-                    src = other_rgb;
-                    prv = other_prev;
-                }
+            if (cross) {
+                mx = round_delta(mx * (1 - blend) + other_eyes->mvx[idx] * blend);
+                my = round_delta(my * (1 - blend) + other_eyes->mvy[idx] * blend);
+                berr = round_delta(berr * (1 - blend) + other_eyes->block_err[idx] * blend);
             }
 
             // real motion + warp. keep the subpixel leftover or slow stuff never moves
@@ -485,7 +496,7 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
             float d = dice[(by / 2) * gx + bx / 2] / 255.0f;
             float d2 = dice[((by / 4) * gx + bx / 4 + 1) % (gx * gy)] / 255.0f;
 
-            if (a.cut) {
+            if (cut) {
                 // THE moment. real mosh = you delete the i-frame here, new
                 // scene never arrives, its motion moves the old scene
                 mode = d < r ? 2 : 1;
@@ -518,12 +529,11 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
 
                     int di = (py * w + px) * 3;
                     if (mode == 1) {
-                        canvas_tmp[di] = src[di];
-                        canvas_tmp[di+1] = src[di+1];
-                        canvas_tmp[di+2] = src[di+2];
+                        canvas_tmp[di] = source[di];
+                        canvas_tmp[di+1] = source[di+1];
+                        canvas_tmp[di+2] = source[di+2];
                         continue;
                     }
-
                     int sx = px + vx, sy = py + vy;
                     if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1;
                     if (sy < 0) sy = 0; else if (sy >= h) sy = h - 1;
@@ -536,16 +546,16 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
                         if (rx < 0) rx = 0; else if (rx >= w) rx = w - 1;
                         if (ry < 0) ry = 0; else if (ry >= h) ry = h - 1;
                         int pi = (ry * w + rx) * 3;
-                        r0 += src[di]   - prv[pi];
-                        g0 += src[di+1] - prv[pi+1];
-                        b0 += src[di+2] - prv[pi+2];
+                        r0 += source[di]   - prev_src[pi];
+                        g0 += source[di+1] - prev_src[pi+1];
+                        b0 += source[di+2] - prev_src[pi+2];
                     }
 
                     if (mode == 3) {
                         // brightness comes back, color doesnt. so the street
                         // is sharp again but still painted in the colors of
                         // wherever we were 5 seconds ago
-                        int yn = (src[di] + 2*src[di+1] + src[di+2]) >> 2;
+                        int yn = (source[di] + 2*source[di+1] + source[di+2]) >> 2;
                         int yc = (r0 + 2*g0 + b0) >> 2;
                         int dl = yn - yc;
                         r0 += dl; g0 += dl; b0 += dl;
@@ -562,17 +572,16 @@ void WarpEngine::rot_and_warp(uint8_t* data, float rot, float warp, float groove
     // the strip at the right/bottom that doesnt fill a whole block just
     // takes the source. nobody looks there. (1080 isnt divisible by 16)
     for (int y = gy * BLOCK; y < h; y++)
-        memcpy(canvas_tmp + y * w * 3, data + y * w * 3, w * 3);
+        memcpy(canvas_tmp + y * w * 3, source + y * w * 3, w * 3);
     if (gx * BLOCK < w) {
         for (int y = 0; y < h; y++) {
             int o = (y * w + gx * BLOCK) * 3;
-            memcpy(canvas_tmp + o, data + o, (w - gx * BLOCK) * 3);
+            memcpy(canvas_tmp + o, source + o, (w - gx * BLOCK) * 3);
         }
     }
 
-    memcpy(prev_src, data, size);
+    memcpy(prev_src, source, size);
     swap(canvas, canvas_tmp);
-    if (other_prev) memcpy(other_prev, other_rgb, w * h * 3);
     if (other_eyes && a.kick) {
         other_kicks++;
         if (other_kicks % 8 == 0) other_bar++;

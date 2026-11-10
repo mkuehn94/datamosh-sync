@@ -706,12 +706,8 @@ vector<Section> cut_song(AudioAnalyzer* audio, const string& video_path) {
         }
     }
 
-    // every drop flips which video is the main one
-    int world = 0;
-    for (size_t i = 0; i < out.size(); i++) {
-        if (out[i].role == ROLE_DROP && (i == 0 || out[i-1].role != ROLE_DROP)) world = !world;
-        out[i].world = world;
-    }
+    // Retain the serialized field for old track readers, not source dominance.
+    for (size_t i = 0; i < out.size(); i++) out[i].world = 0;
 
     cout << "[parts] " << out.size() << " sections, " << cuts << " hard cuts in the video" << endl;
     return out;

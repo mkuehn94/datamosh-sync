@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 
     // --other b.mp4 anywhere in the args, pull it out so the rest stays where it was
     string other_path = "";
-    float cross_amount = 0.35f;
+    float cross_amount = 1.0f;
     string music = "a";
     {
         int out = 1;

@@ -46,8 +46,12 @@ $(OBJDIR)/test_effect: test_effect.cpp $(OBJDIR)/effects.o
 $(OBJDIR)/test_basic: test_basic.cpp $(filter-out $(OBJDIR)/main.o,$(CORE_OBJECTS))
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-check: $(OBJDIR)/test_effect
+$(OBJDIR)/test_dimension: tests/test_dimension.cpp $(OBJDIR)/warp.o $(OBJDIR)/arrange.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+check: $(OBJDIR)/test_effect $(OBJDIR)/test_dimension
 	./$(OBJDIR)/test_effect
+	./$(OBJDIR)/test_dimension
 	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tests/test_shift.py
 	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p 'test_tools.py'
 

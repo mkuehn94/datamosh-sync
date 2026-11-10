@@ -29,8 +29,8 @@ public:
     void estimate_motion(const uint8_t* rgb);
     bool scene_cut() { return cut_detected; }
 
-    // second video. eyes = other engine that ran estimate_motion on it, amount = how
-    // much of the picture listens to it. null = just the one video like before
+    // Second video: one hybrid reference/canvas, no region ownership.
+    // amount 0 = first video, 1 = equal fusion of both pixels and motion.
     void look_at_other(const uint8_t* rgb, WarpEngine* eyes, float amount);
 
     void rot_and_warp(uint8_t* data, float rot, float warp, float groove, const AudioFrame& a);
@@ -95,9 +95,9 @@ private:
     const uint8_t* other_rgb;
     WarpEngine* other_eyes;
     float other_amount;
-    uint8_t* other_prev;
+    std::vector<uint8_t> fused_src;  // clean hybrid, also used for healing
     std::vector<uint8_t*> other_ring;  // quake tape of the other video
-    bool other_on() { return other_eyes && other_amount > 0.001f; }
+    bool other_on() { return other_rgb && other_eyes && other_amount > 0.0f; }
     int other_bar, other_kicks;  // which chunks belong to it changes every few kicks
     std::vector<float> other_field;
     int other_field_bar;

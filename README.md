@@ -342,17 +342,19 @@ last arg, after the 13 parts ones. left out = 1
 ## two videos at once
 
 ```
-./datamosh-sync --other other.mp4 --music a --cross 0.5 video.mp4 "" 0 100 0 0 0 0 0.25 0.05 0 0 0 0 0 0
+./datamosh-sync --other other.mp4 --music a --cross 1 video.mp4 "" 0 100 0 0 0 0 0.25 0.05 0 0 0 0 0 0
 ```
 
-or in the gui, the second box. it isnt 50/50, you always know which world youre in:
-one video is the main one and the other tears in as a few big rifts
+or in the gui, the second box. both videos feed one shared canvas:
+no active world, source flips, or region-shaped windows in the DIMENSION path.
 
-- `--cross` / DIMENSION slider: how far the other world tears in. 0 = never
-- kicks rip the rifts open, then they close again. the blobs change every 8 kicks
-- build opens them further and further, breath before a drop is totally clean
-- a DROP flips which video is the main one, the climax is the only place they
-  really merge. the row on top of the track shows which world, line = how far open
+- `--cross` / DIMENSION: 0 = first video, 1 = equal full-frame fusion (default).
+  Intermediate values bias toward the first video. Use 1 for no preferred source.
+- initialization, healing, residuals, motion and edge strips all use that balance
+- fusion starts with a full-resolution weighted pixel blend, not segmentation.
+  ROT / WARP then corrupt the shared canvas using motion from both sources
+- music still drives corruption, but drops and breaths never switch the source
+  or collapse the mix back to one video. the track's top row shows fusion balance
 - `--music` a, b or both. the track gets made from whatever you pick
 - output gets the slower fps of the two and stops at the shorter one. other video
   gets cropped to the size of the first
@@ -360,7 +362,8 @@ one video is the main one and the other tears in as a few big rifts
 
 every effect is in on it now:
 
-- ROT / WARP: chunks move and heal like the other video
+- ROT / WARP: both sources feed the same evolving image, including clean healing.
+  At DIMENSION 1, swapping input order leaves this stage unchanged
 - TIME QUAKE: every other sheet of time is the other video, shockwaves tear holes
 - SPECTRAL LAG: their shapes in our colors in the blobs, edges like chalk around them.
   look at it full size, half of it doesnt show on a thumbnail
@@ -369,11 +372,12 @@ every effect is in on it now:
 - RECURSION: tiny copies are often the other video, big hits the whole screen
 - VOID: the sky and whatever else got keyed out is a window to the other video
 - STUCK: frozen window into the other video
-- MOTION SAMPLER: tapes the motion of the other video
+- MOTION SAMPLER: tapes the combined motion at the DIMENSION balance
 
-keep rot low (.25 or so, not the .45 default) or it turns to mush and you cant tell
-theres two videos. quake can flip the whole picture to the other video for a moment
-even when the track says otherwise, i kept it
+start with rot around .25, then increase for more shared-canvas smear.
+other effects (especially QUAKE, STUCK, VOID, RECURSION and TEXTURE SWAP) can still
+insert recognizable material from the second video. disable those to isolate
+full-frame fusion; DIMENSION does not turn those separate effects off
 
 two videos have their own violence table in src/arrange.cpp, they hit harder
 

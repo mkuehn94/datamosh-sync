@@ -10,6 +10,6 @@
 - [ ] Add tests for FFT curves, DCT round trips, arrangement constraints and each effect.
 - [ ] Either implement or explicitly retire unused codec-level effect stubs.
 - [ ] Support full Annex B parsing before claiming standalone H.264 stream editing.
-- [ ] Define sidecar hold/drop/freeze semantics and test actual beat-to-frame timing.
+- [ ] Define distinct sidecar hold/drop/freeze modes; beat-grid patch timing now has regression coverage.
 
 Current behavior and limitations: [KNOWN_ISSUES.md](KNOWN_ISSUES.md).

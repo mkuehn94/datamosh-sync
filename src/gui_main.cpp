@@ -384,7 +384,7 @@ static void on_process_clicked(GtkWidget* widget, gpointer data) {
 static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
     int W = gtk_widget_get_allocated_width(area);
     int H = gtk_widget_get_allocated_height(area);
-    // two videos: extra row on top, which world + how far the other one is open
+    // Two videos: fixed fusion balance, never an active-world indicator.
     bool two = strlen(gtk_entry_get_text(GTK_ENTRY(entry_other))) > 0;
     const int LEFT = 80, RIGHT = 88, TOP = two ? 62 : 44;
     int rowh = (H - TOP - 14) / FX_COUNT;
@@ -449,8 +449,7 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
         float cross = gtk_range_get_value(GTK_RANGE(slider_cross));
         for (size_t i = 0; i < sections.size(); i++) {
             const Section& s = sections[i];
-            if (s.world == 0) cairo_set_source_rgb(cr, 0.75, 0.6, 0.2);
-            else cairo_set_source_rgb(cr, 0.15, 0.55, 0.7);
+            cairo_set_source_rgb(cr, 0.4, 0.45, 0.65);
             cairo_rectangle(cr, X_OF(s.start), TOP - 16, X_OF(s.end) - X_OF(s.start), 14);
             cairo_fill(cr);
         }
@@ -458,14 +457,14 @@ static gboolean on_track_draw(GtkWidget* area, cairo_t* cr, gpointer) {
         cairo_set_line_width(cr, 1);
         for (size_t i = 0; i < sections.size(); i++) {
             const Section& s = sections[i];
-            cairo_move_to(cr, X_OF(s.start), TOP - 3 - 11 * dimension_at(s, s.start, cross) / 0.6);
-            cairo_line_to(cr, X_OF(s.end), TOP - 3 - 11 * dimension_at(s, s.end - 0.001f, cross) / 0.6);
+            cairo_move_to(cr, X_OF(s.start), TOP - 3 - 11 * dimension_at(s, s.start, cross));
+            cairo_line_to(cr, X_OF(s.end), TOP - 3 - 11 * dimension_at(s, s.end - 0.001f, cross));
         }
         cairo_stroke(cr);
         cairo_set_font_size(cr, 10);
         cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
         cairo_move_to(cr, 4, TOP - 5);
-        cairo_show_text(cr, "which world");
+        cairo_show_text(cr, "fusion");
     }
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgb(cr, 1, 1, 1);
@@ -733,7 +732,7 @@ int main(int argc, char** argv) {
     // slider = the mean, music moves it around that. strong effects hardly move
     gtk_grid_attach(GTK_GRID(sliders_box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), 0, grid_row++, 3, 1);
     slider_swing = make_slider(sliders_box, "RISE AND FALL with the music (0 = flat)", 0.0, 1.0, 1.0, 0.01);
-    slider_cross = make_slider(sliders_box, "DIMENSION (how far the other world tears in)", 0.0, 1.0, 0.35, 0.01);
+    slider_cross = make_slider(sliders_box, "DIMENSION (0 = first video, 1 = equal fusion)", 0.0, 1.0, 1.0, 0.01);
 
     // --- the track ---
     track_area = gtk_drawing_area_new();

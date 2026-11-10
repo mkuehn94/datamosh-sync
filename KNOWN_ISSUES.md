@@ -24,9 +24,11 @@ works.
 - Standalone `stream_corrupter.cpp` is experimental. It recognizes only
   four-byte Annex B start codes; removing parameter sets can make output
   undecodable. It is not a general H.264 datamosher.
-- Python sidecar workflow has no block matcher in this repo. `drop` mode is
-  unused; beat quantization does not implement a sustained freeze between beats.
-  `scripts/beats.sh` only finds ends of silence, not musical beats in general.
+- Python sidecar workflow has no block matcher in this repo. Sidecar mode is
+  ignored (`hold`, `drop`, `freeze` are not distinct operations). With a beat
+  grid, the selected patch holds until the next beat; without it, a vector
+  affects only f+1. `scripts/beats.sh` finds ends of silence, not musical beats
+  in general.
 - Tests cover selected operations and a short render, not visual quality or all
   input formats. See [BUILD.md](BUILD.md) for commands.
 

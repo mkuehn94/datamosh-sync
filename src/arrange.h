@@ -33,14 +33,13 @@ struct Section {
     float music;                // how intense is the song right here, 0-1
     float fx_scale[FX_COUNT];   // effect too violent for this moment gets turned down
     float fx_aggro[FX_COUNT];   // how violent it really ends up, 0-1. the track draws this
-    int world;                  // two videos: 0 = first one is the main one, 1 = the other
+    int world;                  // reserved legacy track field; always 0
 };
 
 const char* fx_name(int fx);
 const char* role_name(int role);
 float hardness_at(const Section& s, float time);
-// two videos: how much of the other world tears in right now. one world at a time,
-// 50/50 all the time you just dont know where you are
+// Fixed fusion balance: 0 = first video, 1 = equal fusion. No role-based gating.
 float dimension_at(const Section& s, float time, float cross);
 float aggression(int fx, float amount, float void_tol);
 void arrange_two_videos(bool two);  // effects are more violent with two, other table

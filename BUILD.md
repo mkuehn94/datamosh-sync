@@ -42,9 +42,10 @@ make check
 ./test.sh
 ```
 
-`make check` runs pixel-effect assertions, legacy Python block-shift checks,
-and script/viewer tests. `test.sh` also generates a short test video, exercises
-the video reader, renders it and verifies decodable video and audio streams.
+`make check` runs pixel-effect assertions, Python block-shift and beat-timing
+regressions (including CLI output), and script/viewer tests. `test.sh` also
+generates a short test video, exercises the video reader, renders it and
+verifies decodable video and audio streams.
 It does not need private clips. Python tests need NumPy and Pillow; Tk test
 needs tkinter and a display. With Xvfb installed:
 
